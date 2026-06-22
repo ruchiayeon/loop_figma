@@ -26,6 +26,7 @@ import {
   moveNode,
   findNode,
   toSVG,
+  setOverride,
 } from "./store.js";
 import { toCode } from "../bridge/to-code.mjs";
 import { fromCode } from "../bridge/from-code.mjs";
@@ -166,6 +167,71 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: "create_component",
+    description: "Create a reusable component MASTER (a frame-like container). Add children to it (parentId=<component id>), then place copies with create_instance. Returns the created component node.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Optional layer name" },
+        parentId: { type: "string", description: "Optional id of a frame/group/component to nest this master inside" },
+        clipsContent: { type: "boolean", description: "Clip children to the master's bounds (default true)" },
+        layout: {
+          type: "object",
+          description: "Auto-layout config for the master's children (resolved by the engine).",
+          properties: {
+            mode: { type: "string", enum: ["none", "horizontal", "vertical"] },
+            gap: { type: "number" },
+            padding: {
+              type: "object",
+              properties: { top: { type: "number" }, right: { type: "number" }, bottom: { type: "number" }, left: { type: "number" } },
+            },
+            align: { type: "string", enum: ["start", "center", "end"] },
+            justify: { type: "string", enum: ["start", "center", "end", "space-between"] },
+          },
+        },
+        x: { type: "number" }, y: { type: "number" },
+        width: { type: "number" }, height: { type: "number" },
+        rotation: { type: "number" }, opacity: { type: "number" },
+        fill: { type: "string" }, stroke: { type: "string" }, strokeWidth: { type: "number" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "create_instance",
+    description: "Place an INSTANCE (a use) of a component master. Renders as a group at x,y containing the master's content, with per-master-child overrides applied. Returns the created instance node.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        componentId: { type: "string", description: "id of the component master to instantiate" },
+        parentId: { type: "string", description: "Optional id of a frame/group/component to nest this instance inside" },
+        x: { type: "number" }, y: { type: "number" },
+        name: { type: "string" },
+        overrides: {
+          type: "object",
+          description: "Map of MASTER CHILD id -> partial props patch, e.g. { \"<masterChildId>\": { \"text\": \"Buy now\", \"fill\": \"#16a34a\" } }",
+          additionalProperties: true,
+        },
+      },
+      required: ["componentId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "set_override",
+    description: "Set/merge an override patch for one master child on one instance. Only the props you pass change; other overrides are preserved. Returns the updated instance node.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        instanceId: { type: "string" },
+        masterChildId: { type: "string", description: "id of the MASTER child to override" },
+        props: { type: "object", description: "Partial props patch (e.g. { text, fill, ... })", additionalProperties: true },
+      },
+      required: ["instanceId", "masterChildId", "props"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 function ok(obj) {
@@ -220,6 +286,16 @@ function callTool(name, args = {}) {
         const doc = fromCode(args.jsx);
         saveDesign(doc);
         return ok(doc);
+      }
+      case "create_component":
+        // Sugar over create_node with type=component.
+        return ok(createNode({ ...args, type: "component" }));
+      case "create_instance":
+        // Sugar over create_node with type=instance.
+        return ok(createNode({ ...args, type: "instance" }));
+      case "set_override": {
+        const { instanceId, masterChildId, props } = args;
+        return ok(setOverride(instanceId, masterChildId, props));
       }
       default:
         return fail(`Unknown tool: ${name}`);

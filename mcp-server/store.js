@@ -13,10 +13,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // design.json lives one level up so the canvas and the server share it.
 export const DESIGN_PATH = resolve(__dirname, "..", "design.json");
 
-const NODE_TYPES = new Set(["rect", "ellipse", "text", "line", "frame", "group", "image"]);
+const NODE_TYPES = new Set(["rect", "ellipse", "text", "line", "frame", "group", "image", "component", "instance"]);
 // Only these node types may contain children. Parenting under anything else
 // would orphan the child (the renderer never recurses into primitives).
-const CONTAINER_TYPES = new Set(["frame", "group"]);
+// A "component" is a frame-like master definition, so it may contain children.
+// An "instance" is a leaf in the AUTHORING doc (its children are resolved from
+// its master at render time), so it is NOT a container here.
+const CONTAINER_TYPES = new Set(["frame", "group", "component"]);
+
+// Depth cap for instance expansion — guards against component-recursion cycles
+// (an instance whose master transitively contains an instance of itself).
+const MAX_INSTANCE_DEPTH = 16;
 
 // Renumber zIndex to match array position so array order is the single source
 // of truth for z-order. Call after any structural change to a sibling list.
@@ -73,6 +80,10 @@ const DEFAULTS = {
   group:   { width: 0, height: 0, fill: "transparent", stroke: "transparent", strokeWidth: 0 },
   // image: a leaf that renders an <image href> at its box; fill is transparent.
   image:   { width: 200, height: 150, fill: "transparent", stroke: "transparent", strokeWidth: 0, src: "" },
+  // component: a frame-like MASTER definition; container with its own box.
+  component: { width: 400, height: 300, fill: "transparent", stroke: "transparent", strokeWidth: 0 },
+  // instance: a USE of a component; size defaults to the master's at resolve time.
+  instance:  { width: 0, height: 0, fill: "transparent", stroke: "transparent", strokeWidth: 0 },
 };
 
 // Clamp helper keeps designs sane (no NaN, no negative sizes).
@@ -143,6 +154,33 @@ export function createNode(props = {}) {
     if (props.layout && typeof props.layout === "object") node.layout = props.layout;
     node.children = [];
   }
+  if (type === "component") {
+    // A component master behaves like a frame: own box, optional clip, children.
+    node.clipsContent = props.clipsContent ?? true;
+    if (props.layout && typeof props.layout === "object") node.layout = props.layout;
+    node.children = [];
+  }
+  if (type === "instance") {
+    // An instance must reference an existing component master.
+    const componentId = props.componentId;
+    if (componentId == null) {
+      throw new Error(`Cannot create instance: "componentId" is required`);
+    }
+    const target = findNode(componentId, doc);
+    if (!target) {
+      throw new Error(`Cannot create instance: component "${componentId}" not found`);
+    }
+    if (target.node.type !== "component") {
+      throw new Error(`Cannot create instance: node "${componentId}" is a ${target.node.type}, not a component`);
+    }
+    node.componentId = componentId;
+    // overrides: { masterChildId: { ...partial props } }. Default to empty.
+    node.overrides = (props.overrides && typeof props.overrides === "object") ? props.overrides : {};
+    // width/height default to the master's box (overridable by explicit props).
+    if (props.width == null) node.width = num(target.node.width, d.width);
+    if (props.height == null) node.height = num(target.node.height, d.height);
+    // An instance has NO authored children — it is a leaf in the authoring doc.
+  }
   // Note: parentId is NOT stored on the node. The children array is the single
   // source of truth for the tree, so a stored parentId would go stale on move.
 
@@ -192,6 +230,7 @@ export function updateNode(id, props = {}) {
     "name", "x", "y", "width", "height", "rotation", "opacity",
     "fill", "stroke", "strokeWidth", "zIndex", "clipsContent",
     "text", "fontSize", "color", "x2", "y2", "src", "layout",
+    "componentId", "overrides",
   ];
   for (const key of allowed) {
     if (key in props) node[key] = props[key];
@@ -296,11 +335,124 @@ export function applyLayout(doc = loadDesign()) {
   return doc;
 }
 
+// Set (merge) an override patch for one master child on one instance, then save.
+// Existing patch for that child is shallow-merged with the new props so callers
+// can set fields incrementally. Returns the updated instance node.
+export function setOverride(instanceId, masterChildId, props = {}) {
+  const doc = loadDesign();
+  const found = findNode(instanceId, doc);
+  if (!found) throw new Error(`Instance "${instanceId}" not found`);
+  if (found.node.type !== "instance") {
+    throw new Error(`Node "${instanceId}" is a ${found.node.type}, not an instance`);
+  }
+  if (masterChildId == null) throw new Error(`set_override requires a masterChildId`);
+  const node = found.node;
+  if (!node.overrides || typeof node.overrides !== "object") node.overrides = {};
+  node.overrides[masterChildId] = { ...(node.overrides[masterChildId] || {}), ...props };
+  saveDesign(doc);
+  return findNode(instanceId, doc).node;
+}
+
+// Deep clone a plain design node (structural copy of the subtree).
+function deepClone(node) {
+  const copy = { ...node };
+  if (Array.isArray(node.children)) copy.children = node.children.map(deepClone);
+  return copy;
+}
+
+// Find a component master by id within a doc's node tree.
+function findComponent(componentId, doc) {
+  const hit = findNode(componentId, doc);
+  return hit && hit.node.type === "component" ? hit.node : null;
+}
+
+// Apply an instance's overrides to a freshly-cloned child subtree and rewrite
+// ids to be instance-derived (`${instanceId}:${masterId}`). Recurses into the
+// master's nested children. The override map matches by the MASTER child id.
+function applyOverridesAndReid(child, instanceId, overrides) {
+  const masterId = child.id;
+  const patch = overrides && overrides[masterId];
+  // Apply the override patch (shallow merge of known props) onto the clone.
+  if (patch && typeof patch === "object") Object.assign(child, patch);
+  // Rewrite id for rendering only (authoring doc keeps master + instance nodes).
+  child.id = `${instanceId}:${masterId}`;
+  if (Array.isArray(child.children)) {
+    child.children = child.children.map((c) => applyOverridesAndReid(c, instanceId, overrides));
+  }
+  return child;
+}
+
+// Expand a single instance node into a GROUP positioned at the instance's x/y,
+// whose children are deep-cloned master children with overrides applied. Nested
+// instances inside the master are expanded recursively (depth-capped).
+function expandInstance(node, doc, depth, chain) {
+  if (depth > MAX_INSTANCE_DEPTH) {
+    throw new Error(`Instance expansion exceeded max depth ${MAX_INSTANCE_DEPTH} (component recursion?)`);
+  }
+  const master = findComponent(node.componentId, doc);
+  if (!master) {
+    throw new Error(`Instance "${node.id}" references missing component "${node.componentId}"`);
+  }
+  // Cycle guard: a component (transitively) instancing itself.
+  if (chain.includes(node.componentId)) {
+    throw new Error(`Component recursion detected: ${[...chain, node.componentId].join(" -> ")}`);
+  }
+  const nextChain = [...chain, node.componentId];
+
+  // Deep clone the master's children, apply overrides + reid, then recurse to
+  // expand any nested instances within them.
+  const masterChildren = Array.isArray(master.children) ? master.children : [];
+  const cloned = masterChildren
+    .map((c) => applyOverridesAndReid(deepClone(c), node.id, node.overrides))
+    .map((c) => expandNode(c, doc, depth + 1, nextChain));
+
+  // The instance becomes a group at its own x/y. Width/height carry over.
+  return {
+    id: node.id,
+    type: "group",
+    name: node.name || "Instance",
+    x: node.x,
+    y: node.y,
+    width: node.width ?? master.width,
+    height: node.height ?? master.height,
+    rotation: node.rotation ?? 0,
+    opacity: node.opacity ?? 1,
+    fill: "transparent",
+    stroke: "transparent",
+    strokeWidth: 0,
+    zIndex: node.zIndex,
+    children: cloned,
+  };
+}
+
+// Resolve one node for rendering: expand it if it is an instance, otherwise
+// recurse into its children (which themselves may be/contain instances).
+function expandNode(node, doc, depth, chain) {
+  if (node.type === "instance") {
+    return expandInstance(node, doc, depth, chain);
+  }
+  if (Array.isArray(node.children)) {
+    return { ...node, children: node.children.map((c) => expandNode(c, doc, depth, chain)) };
+  }
+  return node;
+}
+
+// resolveInstances(doc) -> a NEW render-doc (deep, non-mutating) in which every
+// instance node has been replaced by a group containing the deep-cloned content
+// of its component master with overrides applied. Recurses for nested instances
+// and throws on a component-recursion cycle. The input doc is never mutated.
+export function resolveInstances(doc = loadDesign()) {
+  const nodes = doc.nodes.map((n) => expandNode(deepClone(n), doc, 0, []));
+  return { ...doc, nodes };
+}
+
 // Render the document to a standalone SVG string — handy for exporting or
-// for an agent to "see" the current design without the canvas open.
+// for an agent to "see" the current design without the canvas open. Instances
+// are expanded to their master content first (resolveInstances).
 export function toSVG(doc = loadDesign()) {
-  const { width, height, background } = doc.document;
-  const body = renderNodes(doc.nodes);
+  const resolved = resolveInstances(doc);
+  const { width, height, background } = resolved.document;
+  const body = renderNodes(resolved.nodes);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect x="0" y="0" width="${width}" height="${height}" fill="${background}"/>
   ${body}
@@ -360,6 +512,17 @@ function renderNode(n) {
     // No background; just a transform wrapper around the children.
     const kids = Array.isArray(n.children) && n.children.length ? renderNodes(n.children) : "";
     return `${open}${kids}${close}`;
+  }
+  if (n.type === "component") {
+    // A component master renders frame-like: own bg box, optional clip, children.
+    const bg = `<rect x="0" y="0" width="${w}" height="${h}" fill="${n.fill}" stroke="${n.stroke}" stroke-width="${n.strokeWidth}"/>`;
+    const kids = Array.isArray(n.children) && n.children.length ? renderNodes(n.children) : "";
+    if (n.clipsContent) {
+      const clipId = `clip-${n.id}`;
+      const clip = `<clipPath id="${clipId}"><rect x="0" y="0" width="${w}" height="${h}"/></clipPath>`;
+      return `${open}${clip}${bg}<g clip-path="url(#${clipId})">${kids}</g>${close}`;
+    }
+    return `${open}${bg}${kids}${close}`;
   }
   // Unknown type but with children — still render the subtree so nothing crashes.
   if (Array.isArray(n.children) && n.children.length) {

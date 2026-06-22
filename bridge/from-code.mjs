@@ -14,7 +14,9 @@
 
 export const VERSION = 1;
 
-const CONTAINER = new Set(["frame", "group"]);
+// frame/group/component are containers in the AUTHORING doc; an instance is a
+// leaf (its children resolve from the master at render time, not here).
+const CONTAINER = new Set(["frame", "group", "component"]);
 
 // ---- attribute extraction --------------------------------------------------
 
@@ -28,6 +30,10 @@ function unescapeAttr(s) {
 
 function unescapeText(s) {
   return String(s)
+    .replace(/&lpar;/g, "(")
+    .replace(/&rpar;/g, ")")
+    .replace(/&lcub;/g, "{")
+    .replace(/&rcub;/g, "}")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
@@ -156,11 +162,26 @@ function buildNode(tag, type, textValue) {
   if (type === "image") {
     node.src = attr(tag, "src") ?? "";
   }
+  if (type === "instance") {
+    // componentId comes from data-instance-of (the element NAME is cosmetic).
+    node.componentId = attr(tag, "data-instance-of") ?? "";
+    const ovRaw = attr(tag, "data-overrides");
+    let overrides = {};
+    if (ovRaw) {
+      try {
+        const parsed = JSON.parse(ovRaw);
+        if (parsed && typeof parsed === "object") overrides = parsed;
+      } catch {
+        overrides = {};
+      }
+    }
+    node.overrides = overrides;
+  }
   if (type === "line") {
     node.x2 = numAttr(tag, "data-x2", 0);
     node.y2 = numAttr(tag, "data-y2", 0);
   }
-  if (type === "frame") {
+  if (type === "frame" || type === "component") {
     node.clipsContent = attr(tag, "data-clips") !== "0";
   }
   if (CONTAINER.has(type)) {
@@ -189,11 +210,139 @@ function buildNode(tag, type, textValue) {
   return node;
 }
 
-// Build a node tree from the token stream, starting just after the root open
-// tag and stopping at the matching root close.
-function buildTree(tokens) {
-  // Find the root <div data-doc="root"> open tag.
-  let rootIdx = tokens.findIndex((t) => t.kind === "open" && /data-doc="root"/.test(t.tag));
+// Walk a sibling list out of `tokens` starting at cursor.i, pushing built nodes
+// into `into`, until the close that ends THIS list's parent (or stream end).
+// `components` maps componentId -> parsed component node, used to splice a
+// component master back in wherever its self-closing placement marker sits.
+function parseSiblings(tokens, cursor, into, components) {
+  while (cursor.i < tokens.length) {
+    const tok = tokens[cursor.i];
+    if (tok.kind === "close") {
+      cursor.i += 1; // consume the close that ends THIS list's parent
+      return;
+    }
+    if (tok.kind === "text") {
+      cursor.i += 1; // stray text outside <span> — ignore
+      continue;
+    }
+    if (tok.kind === "selfclose") {
+      cursor.i += 1;
+      if (tok.type === "component-placement") {
+        // A component master sits here. We can't assume its definition has been
+        // parsed yet (textual/tree order is not resolution order — a nested
+        // component may be declared after its enclosing one), so we drop a
+        // lightweight placeholder and resolve it in a separate splice pass once
+        // EVERY component definition is known. This is order-independent.
+        const id = attr(tok.tag, "data-node-id");
+        into.push({ __placement: true, componentId: id });
+        continue;
+      }
+      // <img .../> or <Comp_* data-node="instance" .../> — leaf, no close tag.
+      into.push(buildNode(tok.tag, tok.type, null));
+      continue;
+    }
+    if (tok.kind === "open") {
+      const tag = tok.tag;
+      const type = tok.type;
+      cursor.i += 1;
+      // Peek for an immediate text child (only <span> has one).
+      let textValue = null;
+      if (tokens[cursor.i] && tokens[cursor.i].kind === "text") {
+        textValue = tokens[cursor.i].value;
+        cursor.i += 1;
+      }
+      const node = buildNode(tag, type, textValue);
+      if (CONTAINER.has(type)) {
+        parseSiblings(tokens, cursor, node.children, components);
+      } else {
+        // Leaf element: consume its close tag.
+        if (tokens[cursor.i] && tokens[cursor.i].kind === "close") cursor.i += 1;
+      }
+      into.push(node);
+      continue;
+    }
+    cursor.i += 1;
+  }
+}
+
+// Recursively replace every { __placement, componentId } placeholder with a
+// fresh deep clone of the referenced component master from `components`. Done in
+// a SECOND pass, after all component definitions are known, so resolution is
+// independent of declaration/tree order (fixes the nested-component drop). A
+// placement whose component is unknown is dropped (it had no definition to
+// splice). `seen` guards against a component that (transitively) places itself.
+function spliceList(list, components, seen) {
+  const out = [];
+  for (const node of list) {
+    if (node && node.__placement) {
+      const comp = components.get(node.componentId);
+      if (comp) out.push(spliceNode(comp, components, seen));
+      continue;
+    }
+    out.push(spliceNode(node, components, seen));
+  }
+  return out;
+}
+
+function spliceNode(node, components, seen) {
+  if (!node || typeof node !== "object") return node;
+  if (!Array.isArray(node.children)) return node;
+  // Recursion guard for self-referential component placements.
+  if (node.type === "component" && node.id != null) {
+    if (seen.has(node.id)) {
+      // Cap: stop expanding; emit the node with its placements left unresolved.
+      const cloned = { ...node, children: [] };
+      return cloned;
+    }
+    seen = new Set(seen);
+    seen.add(node.id);
+  }
+  return { ...node, children: spliceList(node.children, components, seen) };
+}
+
+// Parse the body of each `function Comp_<safeId>() { return ( <div ...> ); }`
+// declaration into a component node, keyed by its data-node-id (the real
+// component id). Components may nest (a component body can hold a
+// component-placement for another). We resolve in TWO order-independent phases:
+//   Phase 1 — parse EVERY function body into a stub component, leaving any
+//             nested component-placements as inert { __placement } markers.
+//   Phase 2 — splice: deep-resolve those markers against the COMPLETE map.
+// Because phase 1 commits every definition before any splicing happens, the
+// result is correct regardless of the textual order of the declarations.
+function parseComponentFunctions(jsx) {
+  // Match `function Comp_X() {` ... capturing the body. toCode emits:
+  //   function Name() {\n  return (\n<body>\n  );\n}\n
+  // The body terminator is the literal `);}` / `); }` sentinel; esc() guarantees
+  // span text can never forge it (parens/braces are entity-escaped), so this
+  // non-greedy capture is safe.
+  const re = /function\s+(Comp_[A-Za-z0-9_]*)\s*\(\)\s*\{\s*return\s*\(\s*([\s\S]*?)\s*\);\s*\}/g;
+  const bodies = [];
+  let m;
+  while ((m = re.exec(jsx)) !== null) bodies.push(m[2]);
+
+  // Phase 1: parse all bodies to stubs (placements stay as inert markers — we
+  // pass no `components` map, so parseSiblings emits placeholders only).
+  const stubs = new Map();
+  for (const body of bodies) {
+    const toks = tokenize(body);
+    const cursor = { i: 0 };
+    const out = [];
+    parseSiblings(toks, cursor, out, null);
+    const comp = out.find((n) => n && n.type === "component");
+    if (comp && comp.id != null && !stubs.has(comp.id)) stubs.set(comp.id, comp);
+  }
+
+  // Phase 2: splice each committed component's subtree against the full map.
+  const components = new Map();
+  for (const [id, stub] of stubs) {
+    components.set(id, spliceNode(stub, stubs, new Set()));
+  }
+  return components;
+}
+
+// Build the full design document from the token stream + parsed components.
+function buildTree(tokens, components) {
+  const rootIdx = tokens.findIndex((t) => t.kind === "open" && /data-doc="root"/.test(t.tag));
   if (rootIdx === -1) throw new Error("fromCode: root document element not found");
   const rootTag = tokens[rootIdx].tag;
 
@@ -207,52 +356,11 @@ function buildTree(tokens) {
     nodes: [],
   };
 
-  // Walk children recursively. `pos` is a mutable cursor object.
   const cursor = { i: rootIdx + 1 };
-
-  function parseChildren(into) {
-    while (cursor.i < tokens.length) {
-      const tok = tokens[cursor.i];
-      if (tok.kind === "close") {
-        cursor.i += 1; // consume the close that ends THIS list's parent
-        return;
-      }
-      if (tok.kind === "text") {
-        cursor.i += 1; // stray text outside <span> — ignore
-        continue;
-      }
-      if (tok.kind === "selfclose") {
-        // <img ... /> — leaf, no children, no close tag.
-        into.push(buildNode(tok.tag, tok.type, null));
-        cursor.i += 1;
-        continue;
-      }
-      if (tok.kind === "open") {
-        const tag = tok.tag;
-        const type = tok.type;
-        cursor.i += 1;
-        // Peek for an immediate text child (only <span> has one).
-        let textValue = null;
-        if (tokens[cursor.i] && tokens[cursor.i].kind === "text") {
-          textValue = tokens[cursor.i].value;
-          cursor.i += 1;
-        }
-        const node = buildNode(tag, type, textValue);
-        if (CONTAINER.has(type)) {
-          // Recurse into element children; parseChildren consumes the close.
-          parseChildren(node.children);
-        } else {
-          // Leaf element: consume its close tag.
-          if (tokens[cursor.i] && tokens[cursor.i].kind === "close") cursor.i += 1;
-        }
-        into.push(node);
-        continue;
-      }
-      cursor.i += 1;
-    }
-  }
-
-  parseChildren(doc.nodes);
+  const raw = [];
+  parseSiblings(tokens, cursor, raw, components);
+  // Resolve any top-level component-placement markers against the full map.
+  doc.nodes = spliceList(raw, components, new Set());
   return doc;
 }
 
@@ -262,6 +370,9 @@ function buildTree(tokens) {
  */
 export function fromCode(jsxString) {
   if (typeof jsxString !== "string") throw new Error("fromCode: expected a string");
+  // First parse the standalone component function declarations, then walk the
+  // Design tree splicing each component master in where its placement sits.
+  const components = parseComponentFunctions(jsxString);
   const tokens = tokenize(jsxString);
-  return buildTree(tokens);
+  return buildTree(tokens, components);
 }

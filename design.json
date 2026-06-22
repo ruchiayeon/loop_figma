@@ -7,7 +7,7 @@
   },
   "nodes": [
     {
-      "id": "n_mqowrqte_1",
+      "id": "n_mqoxjgs8_1",
       "type": "frame",
       "name": "Card",
       "x": 120,
@@ -23,7 +23,7 @@
       "clipsContent": true,
       "children": [
         {
-          "id": "n_mqowrqtq_2",
+          "id": "n_mqoxjgsg_2",
           "type": "rect",
           "name": "Header bg",
           "x": 0,
@@ -38,7 +38,7 @@
           "zIndex": 0
         },
         {
-          "id": "n_mqowrqu2_3",
+          "id": "n_mqoxjgso_3",
           "type": "text",
           "name": "Title",
           "x": 28,
@@ -56,7 +56,7 @@
           "color": "#ffffff"
         },
         {
-          "id": "n_mqowrque_4",
+          "id": "n_mqoxjgsv_4",
           "type": "ellipse",
           "name": "Avatar",
           "x": 452,
@@ -71,7 +71,7 @@
           "zIndex": 2
         },
         {
-          "id": "n_mqowrquq_5",
+          "id": "n_mqoxjgt2_5",
           "type": "text",
           "name": "Body",
           "x": 28,
@@ -89,7 +89,7 @@
           "color": "#374151"
         },
         {
-          "id": "n_mqowrqv4_6",
+          "id": "n_mqoxjgta_6",
           "type": "line",
           "name": "Divider",
           "x": 28,
@@ -105,7 +105,7 @@
           "y2": 156
         },
         {
-          "id": "n_mqowrqvh_7",
+          "id": "n_mqoxjgty_9",
           "type": "frame",
           "name": "Button row",
           "x": 28,
@@ -133,78 +133,84 @@
           },
           "children": [
             {
-              "id": "n_mqowrqvv_8",
-              "type": "frame",
-              "name": "Primary",
+              "id": "n_mqoxjgu5_10",
+              "type": "instance",
+              "name": "Confirm",
               "x": 0,
               "y": 4,
               "width": 150,
               "height": 48,
               "rotation": 0,
               "opacity": 1,
-              "fill": "#4f46e5",
-              "stroke": "#d1d5db",
+              "fill": "transparent",
+              "stroke": "transparent",
               "strokeWidth": 0,
               "zIndex": 0,
-              "clipsContent": true,
-              "children": [
-                {
-                  "id": "n_mqowrqw7_9",
-                  "type": "text",
-                  "name": "label",
-                  "x": 44,
-                  "y": 12,
-                  "width": 220,
-                  "height": 40,
-                  "rotation": 0,
-                  "opacity": 1,
-                  "fill": "transparent",
-                  "stroke": "#000000",
-                  "strokeWidth": 0,
-                  "zIndex": 0,
-                  "text": "Confirm",
-                  "fontSize": 18,
-                  "color": "#ffffff"
+              "componentId": "n_mqoxjgti_7",
+              "overrides": {
+                "n_mqoxjgtp_8": {
+                  "text": "Confirm"
                 }
-              ]
+              }
             },
             {
-              "id": "n_mqowrqwj_10",
-              "type": "frame",
-              "name": "Ghost",
+              "id": "n_mqoxjgud_11",
+              "type": "instance",
+              "name": "Cancel",
               "x": 166,
               "y": 4,
               "width": 150,
               "height": 48,
               "rotation": 0,
               "opacity": 1,
-              "fill": "#ffffff",
-              "stroke": "#4f46e5",
-              "strokeWidth": 2,
+              "fill": "transparent",
+              "stroke": "transparent",
+              "strokeWidth": 0,
               "zIndex": 1,
-              "clipsContent": true,
-              "children": [
-                {
-                  "id": "n_mqowrqwv_11",
-                  "type": "text",
-                  "name": "label",
-                  "x": 50,
-                  "y": 12,
-                  "width": 220,
-                  "height": 40,
-                  "rotation": 0,
-                  "opacity": 1,
-                  "fill": "transparent",
-                  "stroke": "#000000",
-                  "strokeWidth": 0,
-                  "zIndex": 0,
-                  "text": "Cancel",
-                  "fontSize": 18,
-                  "color": "#4f46e5"
+              "componentId": "n_mqoxjgti_7",
+              "overrides": {
+                "n_mqoxjgtp_8": {
+                  "text": "Cancel"
                 }
-              ]
+              }
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "n_mqoxjgti_7",
+      "type": "component",
+      "name": "Button",
+      "x": 700,
+      "y": 110,
+      "width": 150,
+      "height": 48,
+      "rotation": 0,
+      "opacity": 1,
+      "fill": "#4f46e5",
+      "stroke": "transparent",
+      "strokeWidth": 0,
+      "zIndex": 1,
+      "clipsContent": true,
+      "children": [
+        {
+          "id": "n_mqoxjgtp_8",
+          "type": "text",
+          "name": "label",
+          "x": 44,
+          "y": 12,
+          "width": 220,
+          "height": 40,
+          "rotation": 0,
+          "opacity": 1,
+          "fill": "transparent",
+          "stroke": "#000000",
+          "strokeWidth": 0,
+          "zIndex": 0,
+          "text": "Button",
+          "fontSize": 18,
+          "color": "#ffffff"
         }
       ]
     }

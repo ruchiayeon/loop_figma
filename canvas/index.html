@@ -105,6 +105,46 @@ const DEFAULTS = {
   group:   { width: 0, height: 0, fill: "transparent", stroke: "transparent", strokeWidth: 0 },
 };
 const CONTAINER = new Set(["frame", "group"]);
+// Container-like for the layers tree / create-into semantics. A "component"
+// master is a real container (its children are the reusable definition); an
+// "instance" expands into a group but its authoring node has NO children — its
+// subtree is resolved on render, so it is NOT a structural container here.
+const LAYER_CONTAINER = new Set(["frame", "group", "component"]);
+// Cap on INSTANCE-EXPANSION depth (instance boundaries crossed), NOT structural
+// tree depth — mirrors store.js MAX_INSTANCE_DEPTH so the canvas and the server
+// agree on what counts as "too deep". A valid acyclic design may nest a node
+// arbitrarily deep structurally; only chained instance expansions count here.
+const INSTANCE_MAX_DEPTH = 16;
+
+// Resolve an "instance" the SAME way store.resolveInstances does: look up the
+// component master by componentId, DEEP-CLONE its children, and apply each
+// override patch keyed by the MASTER CHILD id across the WHOLE subtree. Returns
+// { kids } (an array of cloned child nodes with derived ids, master-relative
+// coords UNCHANGED — the instance's own <g translate(x,y)> positions them) or
+// { error } when the component is missing / recursion is too deep, so the
+// caller can draw a placeholder instead of throwing (a throw blanks the canvas).
+//
+// `instDepth` counts ONLY instance-expansion levels (incremented when we enter a
+// resolved instance's kids), and `chain` is the list of componentIds expanded on
+// the current path. We reject on instDepth > cap OR on a componentId already in
+// `chain` (identity-based cycle guard, matching store.expandInstance) so true
+// component recursion is caught by identity, deep-but-acyclic trees render fine.
+function resolveInstance(node, doc, instDepth, chain) {
+  if (instDepth > INSTANCE_MAX_DEPTH) return { error: "recursion" };
+  if (chain && chain.includes(node.componentId)) return { error: "recursion" };
+  const found = findNode(node.componentId, doc);
+  if (!found || found.node.type !== "component") return { error: "missing" };
+  const master = found.node;
+  const overrides = node.overrides || {};
+  const cloneChild = (m) => {
+    const patch = overrides[m.id] || {};
+    const clone = { ...m, ...patch, id: `${node.id}:${m.id}` };
+    if (Array.isArray(m.children)) clone.children = m.children.map(cloneChild);
+    return clone;
+  };
+  const kids = Array.isArray(master.children) ? master.children.map(cloneChild) : [];
+  return { kids, master };
+}
 
 let idc = 0;
 const genId = () => `n_${Date.now().toString(36)}_${idc++}`;
@@ -232,7 +272,10 @@ function countNodes(list) {
 //   group: bare transform wrapper around kids
 // Auto-layout coords are RESOLVED in the document; we only draw stored x/y.
 // ---------------------------------------------------------------------------
-function NodeView({ n, onDown, selId, scale }) {
+function NodeView({ n, onDown, selId, scale, doc, depth, instDepth, chain }) {
+  depth = depth || 0;          // structural nesting (for keys/indentation only)
+  instDepth = instDepth || 0;  // instance-expansion depth (capped in resolveInstance)
+  chain = chain || [];         // componentIds expanded on this path (cycle guard)
   const w = n.width || 0, h = n.height || 0;
   const rot = n.rotation ? ` rotate(${n.rotation} ${w / 2} ${h / 2})` : "";
   const transform = `translate(${n.x},${n.y})${rot}`;
@@ -240,7 +283,9 @@ function NodeView({ n, onDown, selId, scale }) {
 
   const kids = Array.isArray(n.children) && n.children.length
     ? ordered(n.children).map(({ node }) => (
-        <NodeView key={node.id} n={node} onDown={onDown} selId={selId} scale={scale} />
+        // Plain structural children: bump only the structural `depth`; instDepth
+        // and chain pass through UNCHANGED (no instance boundary crossed here).
+        <NodeView key={node.id} n={node} onDown={onDown} selId={selId} scale={scale} doc={doc} depth={depth + 1} instDepth={instDepth} chain={chain} />
       ))
     : null;
 
@@ -256,7 +301,10 @@ function NodeView({ n, onDown, selId, scale }) {
     primitive = <line x1={0} y1={0} x2={(n.x2 ?? n.x) - n.x} y2={(n.y2 ?? n.y) - n.y} stroke={n.stroke} strokeWidth={Math.max(n.strokeWidth || 0, 1)} onMouseDown={down} style={{ cursor: "move" }} />;
   } else if (n.type === "image") {
     primitive = <image href={n.src} x={0} y={0} width={w} height={h} onMouseDown={down} style={{ cursor: "move" }} />;
-  } else if (n.type === "frame") {
+  } else if (n.type === "frame" || n.type === "component") {
+    // A "component" master is a container that renders exactly like a frame
+    // (own background + children = the reusable definition). It renders where
+    // it sits, like any node.
     const bg = <rect x={0} y={0} width={w} height={h} fill={n.fill} stroke={n.stroke} strokeWidth={n.strokeWidth} onMouseDown={down} style={{ cursor: "move" }} />;
     if (n.clipsContent) {
       const clipId = `clip-${n.id}`;
@@ -270,6 +318,32 @@ function NodeView({ n, onDown, selId, scale }) {
     } else {
       primitive = <React.Fragment>{bg}{kids}</React.Fragment>;
     }
+  } else if (n.type === "instance") {
+    // Mirror store.resolveInstances: render a GROUP (no own bg) at the instance
+    // x/y (already applied by the outer transform) containing the master's
+    // CHILDREN with overrides applied. Missing master / too-deep recursion =>
+    // a dashed placeholder box rather than a throw (a throw blanks the canvas).
+    const res = resolveInstance(n, doc, instDepth, chain);
+    if (res.error) {
+      const label = res.error === "recursion" ? "⟳ recursive instance" : "⬚ missing component";
+      const pw = w || 120, ph = h || 60;
+      primitive = (
+        <React.Fragment>
+          <rect x={0} y={0} width={pw} height={ph} fill="#2b2b2b" stroke="#ef4444"
+            strokeWidth={1} strokeDasharray="4 3" onMouseDown={down} style={{ cursor: "move" }} />
+          <text x={6} y={18} fontSize={11} fill="#ef4444" fontFamily="Inter, sans-serif" pointerEvents="none">{label}</text>
+        </React.Fragment>
+      );
+    } else {
+      const order = ordered(res.kids).map(({ node }) => node);
+      // Entering a resolved instance's kids IS an instance boundary: bump
+      // instDepth and extend the componentId chain (cycle guard). Structural
+      // `depth` also bumps just for stable keys/indentation.
+      const nextChain = [...chain, n.componentId];
+      primitive = order.map((node) => (
+        <NodeView key={node.id} n={node} onDown={onDown} selId={selId} scale={scale} doc={doc} depth={depth + 1} instDepth={instDepth + 1} chain={nextChain} />
+      ));
+    }
   } else if (n.type === "group") {
     // Group has no hit target of its own (matches toSVG). Selected via layers.
     primitive = kids;
@@ -279,7 +353,8 @@ function NodeView({ n, onDown, selId, scale }) {
 
   // For non-frame containers, kids are rendered as part of primitive above only
   // for frame/group. For leaf primitives that somehow have children, append.
-  const extraKids = (n.type !== "frame" && n.type !== "group" && kids) ? kids : null;
+  const HANDLES_KIDS = n.type === "frame" || n.type === "group" || n.type === "component" || n.type === "instance";
+  const extraKids = (!HANDLES_KIDS && kids) ? kids : null;
 
   const overlay = selId === n.id ? <SelectionOverlay n={n} scale={scale} /> : null;
 
@@ -331,13 +406,24 @@ function Handles({ n, abs, scale, onHandleDown }) {
 // ---------------------------------------------------------------------------
 // Layers tree (indented, expand/collapse, selection at any depth)
 // ---------------------------------------------------------------------------
-function LayerRow({ node, depth, sel, setSel, del, collapsed, toggle }) {
-  const isContainer = CONTAINER.has(node.type);
+function LayerRow({ node, depth, sel, setSel, del, collapsed, toggle, doc }) {
+  // Structural container in the tree: frame/group/component expand their real
+  // children[]. An instance has no authoring children (its subtree is resolved
+  // on render), so it is a leaf row here (still selectable, no twirl).
+  const isContainer = LAYER_CONTAINER.has(node.type);
   const open = !collapsed[node.id];
   const swColor = node.type === "text" ? node.color
-    : node.type === "group" ? "#444"
+    : (node.type === "group" || node.type === "instance") ? "#444"
+    : node.type === "component" ? "#a855f7"
     : (node.fill === "transparent" || node.fill == null ? "#444" : node.fill);
   const kids = isContainer && Array.isArray(node.children) ? ordered(node.children).map((e) => e.node) : [];
+  // ◆ component master, ◇ instance use. Instances show their master's name.
+  const icon = node.type === "component" ? "◆" : node.type === "instance" ? "◇" : null;
+  let masterName = null;
+  if (node.type === "instance" && doc) {
+    const m = findNode(node.componentId, doc);
+    masterName = m && m.node.type === "component" ? m.node.name : "?";
+  }
   return (
     <React.Fragment>
       <div className={"layer" + (sel === node.id ? " sel" : "")}
@@ -346,13 +432,20 @@ function LayerRow({ node, depth, sel, setSel, del, collapsed, toggle }) {
         <span className="tw" onClick={(e) => { e.stopPropagation(); if (isContainer && kids.length) toggle(node.id); }}>
           {isContainer && kids.length ? (open ? "▾" : "▸") : ""}
         </span>
-        <span className="sw" style={{ background: swColor }}></span>
-        <span className="nm">{node.name} <span style={{ color: "#666" }}>· {node.type}</span></span>
+        {icon
+          ? <span className="sw" style={{ background: "transparent", border: "none", color: swColor, textAlign: "center", lineHeight: "12px", fontSize: 12 }}>{icon}</span>
+          : <span className="sw" style={{ background: swColor }}></span>}
+        <span className="nm">
+          {node.name}
+          {node.type === "instance"
+            ? <span style={{ color: "#666" }}> · → {masterName}</span>
+            : <span style={{ color: "#666" }}> · {node.type}</span>}
+        </span>
         <span className="x" onClick={(e) => { e.stopPropagation(); del(node.id); }}>×</span>
       </div>
       {isContainer && open && kids.map((c) => (
         <LayerRow key={c.id} node={c} depth={depth + 1} sel={sel} setSel={setSel}
-          del={del} collapsed={collapsed} toggle={toggle} />
+          del={del} collapsed={collapsed} toggle={toggle} doc={doc} />
       ))}
     </React.Fragment>
   );
@@ -627,7 +720,7 @@ function App() {
         {topNodes.length === 0 && <div className="empty">No layers yet. Pick a tool and click the canvas, or load design.json.</div>}
         {[...topNodes].reverse().map((n) => (
           <LayerRow key={n.id} node={n} depth={0} sel={sel} setSel={(id) => { setSel(id); setTool("select"); }}
-            del={del} collapsed={collapsed} toggle={toggle} />
+            del={del} collapsed={collapsed} toggle={toggle} doc={doc} />
         ))}
       </div>
 
@@ -637,7 +730,7 @@ function App() {
             <rect data-bg="1" x={0} y={0} width={doc.document.width} height={doc.document.height}
               fill={doc.document.background} stroke="#888" strokeWidth={1 / view.scale} />
             {topNodes.map((n) => (
-              <NodeView key={n.id} n={n} onDown={onShapeDown} selId={sel} scale={view.scale} />
+              <NodeView key={n.id} n={n} onDown={onShapeDown} selId={sel} scale={view.scale} doc={doc} depth={0} />
             ))}
             {selNode && <Handles n={selNode} abs={absOffset(selNode.id, doc)} scale={view.scale} onHandleDown={onHandleDown} />}
           </g>
@@ -646,7 +739,7 @@ function App() {
         <svg id="export-svg-source" style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
           viewBox={`0 0 ${doc.document.width} ${doc.document.height}`} xmlns="http://www.w3.org/2000/svg">
           <rect x={0} y={0} width={doc.document.width} height={doc.document.height} fill={doc.document.background} />
-          {topNodes.map((n) => <NodeView key={n.id} n={n} onDown={() => {}} selId={null} scale={1} />)}
+          {topNodes.map((n) => <NodeView key={n.id} n={n} onDown={() => {}} selId={null} scale={1} doc={doc} depth={0} />)}
         </svg>
 
         {showCode && (

@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import {
   loadDesign, createNode, updateNode, deleteNode, findNode, moveNode, applyLayout, toSVG,
+  setOverride, resolveInstances,
 } from "./store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -68,9 +69,9 @@ async function main() {
 
   const list = await request("tools/list", {});
   const names = list.result.tools.map((t) => t.name).sort();
-  check("lists 8 tools", names.length === 8);
+  check("lists 11 tools", names.length === 11);
   check("expected tool names",
-    JSON.stringify(names) === JSON.stringify(["create_node", "delete_node", "export_design", "get_design", "import_code", "move_node", "set_layout", "update_node"]));
+    JSON.stringify(names) === JSON.stringify(["create_component", "create_instance", "create_node", "delete_node", "export_design", "get_design", "import_code", "move_node", "set_layout", "set_override", "update_node"]));
 
   let design = parse(await request("tools/call", { name: "get_design", arguments: {} }));
   check("empty doc has 0 nodes", design.nodes.length === 0);
@@ -184,10 +185,53 @@ async function main() {
   const afterImport = parse(await request("tools/call", { name: "get_design", arguments: {} }));
   check("import_code persisted: old nodes gone", afterImport.nodes.length === 1 && afterImport.nodes[0].id === "imp1");
 
+  // ---- COMPONENTS / INSTANCES via MCP ----
+
+  // Build a component master with a text child.
+  const comp = parse(await request("tools/call", {
+    name: "create_component", arguments: { x: 0, y: 0, width: 200, height: 80 },
+  }));
+  check("create_component returns a component node", comp.type === "component" && Array.isArray(comp.children));
+  const label = parse(await request("tools/call", {
+    name: "create_node", arguments: { type: "text", parentId: comp.id, x: 10, y: 10, text: "Click me" },
+  }));
+  check("component child text created", label.text === "Click me");
+
+  // Two instances of the same master.
+  const inst1 = parse(await request("tools/call", {
+    name: "create_instance", arguments: { componentId: comp.id, x: 300, y: 50 },
+  }));
+  const inst2 = parse(await request("tools/call", {
+    name: "create_instance", arguments: { componentId: comp.id, x: 300, y: 200 },
+  }));
+  check("create_instance returns instance with componentId", inst1.type === "instance" && inst1.componentId === comp.id);
+  check("instance inherits master size by default", inst1.width === 200 && inst1.height === 80);
+
+  // create_instance with bad componentId errors.
+  const badInst = (await request("tools/call", { name: "create_instance", arguments: { componentId: "nope" } })).result;
+  check("create_instance with missing component errors", badInst.isError === true);
+
+  // SVG should contain the master text THREE times: once in the master itself
+  // (it renders where it sits) + once per instance. At minimum >= 2 (per instance).
+  const ciSvg = (await request("tools/call", { name: "export_design", arguments: { format: "svg" } })).result.content[0].text;
+  const labelCount = ciSvg.split("Click me").length - 1;
+  check("svg renders master text for each instance (>=2 occurrences)", labelCount >= 2);
+
+  // Override changes ONLY that instance's text/fill.
+  parse(await request("tools/call", {
+    name: "set_override", arguments: { instanceId: inst1.id, masterChildId: label.id, props: { text: "Buy now", color: "#16a34a" } },
+  }));
+  const ovSvg = (await request("tools/call", { name: "export_design", arguments: { format: "svg" } })).result.content[0].text;
+  check("override changes that instance's text", ovSvg.includes("Buy now"));
+  check("override leaves the other instance text unchanged", (ovSvg.split("Click me").length - 1) >= 2);
+
   child.kill();
 
   // ---- Phase 1: nesting tree unit tests (drive store.js directly) ----
   storeTests();
+
+  // ---- Phase 2: components / instances unit tests (drive store.js) ----
+  componentTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);
@@ -423,6 +467,95 @@ function storeTests() {
     delFNode.children[0].id === dc1.id && delFNode.children[1].id === dc3.id);
   // delete still reports the correct remaining count (frame + 2 survivors = 3).
   check("delete-reflow: remaining count correct after delete", delResult.remaining === 3);
+}
+
+// Direct unit tests of the component / instance model + instance resolution.
+function componentTests() {
+  console.log("\n-- store.js components / instances --");
+  if (existsSync(DESIGN_PATH)) rmSync(DESIGN_PATH);
+
+  // 1. A component master (frame-like) with a text child.
+  const comp = createNode({ type: "component", x: 0, y: 0, width: 200, height: 60 });
+  let doc = loadDesign();
+  check("component is a container (has children[])", Array.isArray(findNode(comp.id, doc).node.children));
+  const labelMaster = createNode({ type: "text", parentId: comp.id, x: 10, y: 10, text: "Original", color: "#111111" });
+  check("text child lives in component.children", findNode(comp.id, loadDesign()).node.children.some((n) => n.id === labelMaster.id));
+
+  // 2. Two instances of the same master at different positions.
+  const i1 = createNode({ type: "instance", componentId: comp.id, x: 300, y: 0 });
+  const i2 = createNode({ type: "instance", componentId: comp.id, x: 300, y: 100 });
+  check("instance stores componentId + empty overrides", i1.componentId === comp.id && typeof i1.overrides === "object");
+  check("instance defaults to master width/height", i1.width === 200 && i1.height === 60);
+
+  // 3. createNode validation: missing/invalid componentId throws.
+  let noCompThrew = false;
+  try { createNode({ type: "instance", x: 0, y: 0 }); } catch { noCompThrew = true; }
+  check("instance without componentId throws", noCompThrew);
+  let badCompThrew = false;
+  try { createNode({ type: "instance", componentId: "does-not-exist" }); } catch { badCompThrew = true; }
+  check("instance with unknown componentId throws", badCompThrew);
+  // componentId that points at a non-component throws too.
+  const plainRect = createNode({ type: "rect", x: 0, y: 0, width: 10, height: 10 });
+  let notCompThrew = false;
+  try { createNode({ type: "instance", componentId: plainRect.id }); } catch { notCompThrew = true; }
+  check("instance pointing at a non-component throws", notCompThrew);
+
+  // 4. resolveInstances: each instance becomes a GROUP at its x/y with cloned children.
+  doc = loadDesign();
+  const rdoc = resolveInstances(doc);
+  const r1 = rdoc.nodes.find((n) => n.id === i1.id);
+  const r2 = rdoc.nodes.find((n) => n.id === i2.id);
+  check("resolved instance is a group at the instance x/y", r1.type === "group" && r1.x === 300 && r1.y === 0);
+  check("resolved instance contains the cloned master child", r1.children.length === 1 && r1.children[0].text === "Original");
+  check("clone ids are instance-derived (instanceId:masterId)", r1.children[0].id === `${i1.id}:${labelMaster.id}`);
+  // Authoring doc is NOT mutated by resolveInstances (still an instance, no children).
+  check("resolveInstances does not mutate authoring doc", findNode(i1.id, loadDesign()).node.type === "instance");
+
+  // 5. toSVG renders the master content for EACH instance (twice) + once for master.
+  let svg = toSVG(loadDesign());
+  check("toSVG renders master text twice (one per instance)", (svg.split("Original").length - 1) >= 2);
+  // 6. Instance placed at x,y offsets its content by x,y (group transform).
+  check("instance content offset by instance x,y", svg.includes("translate(300,0)") && svg.includes("translate(300,100)"));
+
+  // 7. Override changes ONLY that instance's text/fill; the other is unchanged.
+  setOverride(i1.id, labelMaster.id, { text: "Changed", color: "#16a34a" });
+  svg = toSVG(loadDesign());
+  check("override applies to its instance", svg.includes("Changed") && svg.includes('fill="#16a34a"'));
+  // The non-overridden instance still shows the original text.
+  check("override leaves the OTHER instance unchanged", svg.includes("Original"));
+  // The original master child text is untouched in the authoring doc.
+  check("override does not mutate the master child", findNode(labelMaster.id, loadDesign()).node.text === "Original");
+
+  // 8. Updating the MASTER is reflected when re-resolving (live link).
+  updateNode(labelMaster.id, { text: "MasterEdited" });
+  svg = toSVG(loadDesign());
+  // The non-overridden instance (i2) now shows the edited master text.
+  check("editing master is reflected in non-overridden instance", svg.includes("MasterEdited"));
+  // The overridden instance (i1) still shows its override, not the master edit.
+  check("overridden instance keeps its override after master edit", svg.includes("Changed"));
+
+  // 9. Deleting the component: re-resolving an instance of a now-missing master throws.
+  if (existsSync(DESIGN_PATH)) rmSync(DESIGN_PATH);
+  const dComp = createNode({ type: "component", x: 0, y: 0, width: 100, height: 100 });
+  createNode({ type: "text", parentId: dComp.id, x: 5, y: 5, text: "X" });
+  const dInst = createNode({ type: "instance", componentId: dComp.id, x: 200, y: 0 });
+  // Before delete: resolves fine.
+  check("instance resolves before master delete", toSVG(loadDesign()).includes("X"));
+  deleteNode(dComp.id);
+  let resolveThrew = false;
+  try { toSVG(loadDesign()); } catch { resolveThrew = true; }
+  check("resolving an instance of a deleted component throws", resolveThrew);
+
+  // 10. Nested-instance recursion throws (component contains an instance of itself).
+  if (existsSync(DESIGN_PATH)) rmSync(DESIGN_PATH);
+  const recComp = createNode({ type: "component", x: 0, y: 0, width: 100, height: 100 });
+  // Put an instance of recComp INSIDE recComp -> a cycle.
+  createNode({ type: "instance", parentId: recComp.id, componentId: recComp.id, x: 0, y: 0 });
+  // A top-level instance of recComp must throw on resolution (cycle detected).
+  createNode({ type: "instance", componentId: recComp.id, x: 200, y: 0 });
+  let cycleThrew = false;
+  try { resolveInstances(loadDesign()); } catch { cycleThrew = true; }
+  check("nested-instance recursion throws (cycle guard)", cycleThrew);
 }
 
 main().catch((err) => { console.error("Test harness crashed:", err); process.exit(1); });

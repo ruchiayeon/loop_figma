@@ -39,14 +39,37 @@ function rf(n) {
 }
 
 function esc(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // Escape &,<,> for HTML correctness AND ( ) { } so that span text can never
+  // forge the `);}` / `); }` body-terminator sentinel that from-code's
+  // component-function-body extractor regex relies on. unescapeText() inverts
+  // all of these. (Entity names mirror HTML5 named refs for ( ) { }.)
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\(/g, "&lpar;")
+    .replace(/\)/g, "&rpar;")
+    .replace(/\{/g, "&lcub;")
+    .replace(/\}/g, "&rcub;");
 }
 
 function escAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-const CONTAINER = new Set(["frame", "group"]);
+// A component master is a frame-like container (own box + children). It renders
+// as a <div> inside its OWN named React function (see emitComponentFn). An
+// instance is a leaf USE of a component, rendered as <Comp_<safeId> .../>.
+const CONTAINER = new Set(["frame", "group", "component"]);
+
+// Deterministic, lossy-but-cosmetic React function name for a component master.
+// The REAL component id is always carried on data-* attributes (data-node-id on
+// the component, data-instance-of on instances), so un-sanitizing the name is
+// never required by from-code.mjs.
+export function compName(id) {
+  const safe = String(id == null ? "" : id).replace(/[^A-Za-z0-9_]/g, "_");
+  return `Comp_${safe}`;
+}
 
 function isFlex(node) {
   return node && node.layout && node.layout.mode && node.layout.mode !== "none";
@@ -131,7 +154,8 @@ function dataAttrs(node, parentFlex) {
     a.push(`data-x2="${r(node.x2)}"`);
     a.push(`data-y2="${r(node.y2)}"`);
   }
-  if (node.type === "frame") {
+  // frame AND component both carry clipsContent (component is frame-like).
+  if (node.type === "frame" || node.type === "component") {
     a.push(`data-clips="${node.clipsContent === false ? "0" : "1"}"`);
   }
   if (CONTAINER.has(node.type)) {
@@ -151,7 +175,46 @@ function renderList(nodes, parentFlex, depth) {
   return nodes.map((n) => renderNode(n, parentFlex, depth)).join("\n");
 }
 
+// An instance renders as a USAGE of its component's named function. All of the
+// instance's own authoring fields (placement x/y, name, z, size, overrides,
+// componentId) are carried on data-* so from-code recovers the instance node
+// exactly. style is emitted for visualization only.
+function renderInstance(node, parentFlex, depth) {
+  const pad = indent(depth);
+  const style = styleLiteral(node, parentFlex);
+  const a = [];
+  a.push(`data-node="instance"`);
+  a.push(`data-node-id="${escAttr(node.id)}"`);
+  a.push(`data-name="${escAttr(node.name == null ? "" : node.name)}"`);
+  a.push(`data-instance-of="${escAttr(node.componentId == null ? "" : node.componentId)}"`);
+  a.push(`data-x="${r(node.x)}"`);
+  a.push(`data-y="${r(node.y)}"`);
+  a.push(`data-rotation="${r(node.rotation || 0)}"`);
+  a.push(`data-z="${r(node.zIndex == null ? 0 : node.zIndex)}"`);
+  const ov = node.overrides && typeof node.overrides === "object" ? node.overrides : {};
+  a.push(`data-overrides="${escAttr(JSON.stringify(ov))}"`);
+  const Name = compName(node.componentId);
+  return `${pad}<${Name} ${a.join(" ")} style={${style}} />`;
+}
+
+// A component master, where it SITS in the tree, is replaced by a self-closing
+// placement marker. The component's full definition (box props + children) is
+// emitted separately as a named function (emitComponentFn). data-node-id here is
+// the component's id so from-code can splice the parsed function body back in at
+// this exact tree position.
+function renderComponentPlacement(node, parentFlex, depth) {
+  const pad = indent(depth);
+  const a = [];
+  a.push(`data-node="component-placement"`);
+  a.push(`data-node-id="${escAttr(node.id)}"`);
+  const Name = compName(node.id);
+  return `${pad}<${Name} ${a.join(" ")} />`;
+}
+
 function renderNode(node, parentFlex, depth) {
+  if (node.type === "instance") return renderInstance(node, parentFlex, depth);
+  if (node.type === "component") return renderComponentPlacement(node, parentFlex, depth);
+
   const pad = indent(depth);
   const style = styleLiteral(node, parentFlex);
   const data = dataAttrs(node, parentFlex);
@@ -184,6 +247,47 @@ function renderNode(node, parentFlex, depth) {
   return `${pad}<div ${data} style={${style}}></div>`;
 }
 
+// Render the INNER box <div> of a component master (its definition body). This
+// is what lives inside `function Comp_<safeId>() { return (...) }`. The div
+// carries data-node="component" + the master's full box props + children. It is
+// positioned at the component's OWN x/y (its placement in the parent tree is a
+// separate self-closing marker), so parentFlex=false here.
+function renderComponentBody(node, depth) {
+  const pad = indent(depth);
+  const style = styleLiteral(node, false);
+  const data = dataAttrs(node, false);
+  const kids = Array.isArray(node.children) ? node.children : [];
+  if (!kids.length) return `${pad}<div ${data} style={${style}}></div>`;
+  const childFlex = isFlex(node);
+  const body = renderList(kids, childFlex, depth + 1);
+  return `${pad}<div ${data} style={${style}}>\n${body}\n${pad}</div>`;
+}
+
+// Collect every component master in the tree (depth-first, including components
+// nested inside frames/groups/other components). Deterministic order = tree
+// order. A component's own children are searched too (a component may contain a
+// nested component definition).
+function collectComponents(nodes, acc = []) {
+  for (const n of nodes) {
+    if (n && n.type === "component") acc.push(n);
+    if (Array.isArray(n && n.children)) collectComponents(n.children, acc);
+  }
+  return acc;
+}
+
+// Emit one standalone named React function for a component master.
+function emitComponentFn(node) {
+  const Name = compName(node.id);
+  const body = renderComponentBody(node, 2);
+  return (
+    `function ${Name}() {\n` +
+    `  return (\n` +
+    body +
+    `\n  );\n` +
+    `}\n`
+  );
+}
+
 /**
  * toCode(design) -> string of JSX.
  *
@@ -206,7 +310,13 @@ export function toCode(design) {
     `{ position: "relative", width: ${JSON.stringify(`${width}px`)}, ` +
     `height: ${JSON.stringify(`${height}px`)}, backgroundColor: ${JSON.stringify(background)} }`;
 
+  // Each component master becomes its OWN named function declaration, emitted
+  // ONCE before Design regardless of how many instances reference it.
+  const componentFns = collectComponents(nodes).map(emitComponentFn).join("\n");
+  const componentPrelude = componentFns ? componentFns + "\n" : "";
+
   return (
+    componentPrelude +
     `function Design() {\n` +
     `  return (\n` +
     `    <div data-doc="root" data-doc-version="${version}" ` +

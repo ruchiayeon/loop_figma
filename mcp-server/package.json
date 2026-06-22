@@ -1,0 +1,11 @@
+{
+  "name": "mini-figma-mcp",
+  "version": "1.0.0",
+  "description": "MCP server that lets agents create and edit designs on the Mini-Figma canvas",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  }
+}

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mini-Figma Canvas</title>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: #1e1e1e; color: #e6e6e6; overflow: hidden; }
+  #root { height: 100vh; }
+  .app { display: grid; grid-template-columns: 240px 1fr 260px; grid-template-rows: 48px 1fr; height: 100vh; }
+  .topbar { grid-column: 1 / 4; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #2c2c2c; border-bottom: 1px solid #000; }
+  .brand { font-weight: 700; font-size: 14px; margin-right: 12px; letter-spacing: .3px; }
+  .tool { background: #3a3a3a; border: 1px solid #4a4a4a; color: #e6e6e6; border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+  .tool:hover { background: #474747; }
+  .tool.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+  .sep { width: 1px; height: 22px; background: #4a4a4a; margin: 0 4px; }
+  .spacer { flex: 1; }
+  .panel { background: #252525; overflow-y: auto; }
+  .layers { border-right: 1px solid #000; }
+  .props { border-left: 1px solid #000; padding: 12px; }
+  .panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #9a9a9a; padding: 12px 12px 6px; }
+  .layer { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; border-left: 2px solid transparent; }
+  .layer:hover { background: #2f2f2f; }
+  .layer.sel { background: #34324a; border-left-color: #4f46e5; }
+  .layer .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #555; flex-shrink: 0; }
+  .layer .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layer .x { color: #888; font-size: 14px; }
+  .layer .x:hover { color: #ff6b6b; }
+  .stage { position: relative; overflow: hidden; background: #1a1a1a; background-image: radial-gradient(#2e2e2e 1px, transparent 1px); background-size: 16px 16px; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 11px; color: #9a9a9a; margin-bottom: 4px; }
+  .field input[type=number], .field input[type=text] { width: 100%; background: #1c1c1c; border: 1px solid #3a3a3a; color: #e6e6e6; border-radius: 5px; padding: 6px 8px; font-size: 13px; }
+  .field input[type=color] { width: 100%; height: 30px; background: #1c1c1c; border: 1px solid #3a3a3a; border-radius: 5px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .hint { font-size: 12px; color: #888; padding: 12px; line-height: 1.5; }
+  .badge { font-size: 11px; background: #4f46e5; color: #fff; padding: 2px 7px; border-radius: 10px; }
+  .empty { padding: 12px; color: #777; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+const DEFAULTS = {
+  rect:    { width: 160, height: 100, fill: "#4f46e5", stroke: "#1e1b4b", strokeWidth: 0 },
+  ellipse: { width: 140, height: 140, fill: "#10b981", stroke: "#064e3b", strokeWidth: 0 },
+  text:    { width: 220, height: 40,  fill: "transparent", text: "Text", fontSize: 24, color: "#111827" },
+  line:    { width: 200, height: 0, stroke: "#e6e6e6", strokeWidth: 2 },
+};
+
+let idc = 0;
+const genId = () => `n_${Date.now().toString(36)}_${idc++}`;
+const emptyDoc = () => ({ version: 1, document: { width: 1200, height: 800, background: "#ffffff" }, nodes: [] });
+
+function newNode(type, x, y) {
+  const d = DEFAULTS[type];
+  const n = { id: genId(), type, name: type[0].toUpperCase() + type.slice(1),
+    x, y, width: d.width, height: d.height, rotation: 0, opacity: 1,
+    fill: d.fill, stroke: d.stroke || "#000", strokeWidth: d.strokeWidth || 0, zIndex: 0 };
+  if (type === "text") { n.text = d.text; n.fontSize = d.fontSize; n.color = d.color; }
+  if (type === "line") { n.x2 = x + d.width; n.y2 = y; }
+  return n;
+}
+
+function Shape({ n, onDown }) {
+  const t = `rotate(${n.rotation || 0} ${n.x + n.width / 2} ${n.y + n.height / 2})`;
+  const common = { opacity: n.opacity, transform: t, onMouseDown: (e) => onDown(e, n.id), style: { cursor: "move" } };
+  if (n.type === "rect")
+    return <rect x={n.x} y={n.y} width={n.width} height={n.height} fill={n.fill} stroke={n.stroke} strokeWidth={n.strokeWidth} {...common} />;
+  if (n.type === "ellipse")
+    return <ellipse cx={n.x + n.width / 2} cy={n.y + n.height / 2} rx={n.width / 2} ry={n.height / 2} fill={n.fill} stroke={n.stroke} strokeWidth={n.strokeWidth} {...common} />;
+  if (n.type === "text")
+    return <text x={n.x} y={n.y + (n.fontSize || 24)} fontSize={n.fontSize} fill={n.color} fontFamily="Inter, sans-serif" {...common}>{n.text}</text>;
+  if (n.type === "line")
+    return <line x1={n.x} y1={n.y} x2={n.x2} y2={n.y2} stroke={n.stroke} strokeWidth={Math.max(n.strokeWidth, 1)} {...common} />;
+  return null;
+}
+
+function App() {
+  const [doc, setDoc] = useState(emptyDoc);
+  const [sel, setSel] = useState(null);
+  const [tool, setTool] = useState("select");
+  const [view, setView] = useState({ x: 40, y: 40, scale: 0.7 });
+  const [status, setStatus] = useState("Ready");
+  const stageRef = useRef(null);
+  const drag = useRef(null);
+  const fileRef = useRef(null);
+
+  const nodes = [...doc.nodes].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  const selNode = doc.nodes.find((n) => n.id === sel) || null;
+
+  const toCanvas = (cx, cy) => {
+    const r = stageRef.current.getBoundingClientRect();
+    return { x: (cx - r.left - view.x) / view.scale, y: (cy - r.top - view.y) / view.scale };
+  };
+  const patch = (id, props) => setDoc((d) => ({ ...d, nodes: d.nodes.map((n) => n.id === id ? { ...n, ...props } : n) }));
+
+  const onStageDown = (e) => {
+    const p = toCanvas(e.clientX, e.clientY);
+    if (tool === "select") {
+      if (e.target.dataset.bg) { setSel(null); drag.current = { mode: "pan", sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }; }
+      return;
+    }
+    const n = newNode(tool, Math.round(p.x), Math.round(p.y));
+    n.zIndex = doc.nodes.length;
+    setDoc((d) => ({ ...d, nodes: [...d.nodes, n] }));
+    setSel(n.id); setTool("select"); setStatus(`Created ${n.type}`);
+  };
+  const onShapeDown = (e, id) => {
+    e.stopPropagation(); setSel(id);
+    const n = doc.nodes.find((x) => x.id === id);
+    const p = toCanvas(e.clientX, e.clientY);
+    drag.current = { mode: "move", id, ox: p.x - n.x, oy: p.y - n.y };
+  };
+  const onHandleDown = (e, id, corner) => {
+    e.stopPropagation();
+    const n = doc.nodes.find((x) => x.id === id);
+    drag.current = { mode: "resize", id, corner, start: { ...n }, p0: toCanvas(e.clientX, e.clientY) };
+  };
+
+  useEffect(() => {
+    const move = (e) => {
+      if (!drag.current) return;
+      const g = drag.current;
+      if (g.mode === "pan") { setView((v) => ({ ...v, x: g.vx + (e.clientX - g.sx), y: g.vy + (e.clientY - g.sy) })); return; }
+      const p = toCanvas(e.clientX, e.clientY);
+      if (g.mode === "move") patch(g.id, { x: Math.round(p.x - g.ox), y: Math.round(p.y - g.oy) });
+      if (g.mode === "resize") {
+        const dx = p.x - g.p0.x, dy = p.y - g.p0.y; const s = g.start; let { x, y, width, height } = s;
+        if (g.corner.includes("e")) width = Math.max(8, s.width + dx);
+        if (g.corner.includes("s")) height = Math.max(8, s.height + dy);
+        if (g.corner.includes("w")) { width = Math.max(8, s.width - dx); x = s.x + dx; }
+        if (g.corner.includes("n")) { height = Math.max(8, s.height - dy); y = s.y + dy; }
+        patch(g.id, { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+      }
+    };
+    const up = () => { drag.current = null; };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+  });
+
+  const onWheel = (e) => {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      const f = e.deltaY < 0 ? 1.1 : 0.9;
+      setView((v) => ({ ...v, scale: Math.min(4, Math.max(0.1, v.scale * f)) }));
+    } else setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
+  };
+
+  const del = (id) => { setDoc((d) => ({ ...d, nodes: d.nodes.filter((n) => n.id !== id) })); if (sel === id) setSel(null); };
+  const reorder = (id, dir) => setDoc((d) => {
+    const ns = d.nodes.map((n) => ({ ...n }));
+    const n = ns.find((x) => x.id === id); if (!n) return d;
+    n.zIndex = (n.zIndex || 0) + (dir === "up" ? 1.5 : -1.5);
+    ns.sort((a, b) => a.zIndex - b.zIndex).forEach((x, i) => x.zIndex = i);
+    return { ...d, nodes: ns };
+  });
+
+  const loadFromServer = async () => {
+    try {
+      const res = await fetch("../design.json?t=" + Date.now());
+      if (!res.ok) throw new Error("nf");
+      const j = await res.json();
+      setDoc(j); setSel(null); setStatus(`Loaded ${j.nodes.length} nodes from design.json`);
+    } catch { setStatus("Can't fetch over file://. Use 'Open file' to pick design.json."); }
+  };
+  const openFile = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => { try { const j = JSON.parse(r.result); setDoc(j); setSel(null); setStatus(`Loaded ${j.nodes.length} nodes`); } catch { setStatus("Invalid JSON"); } };
+    r.readAsText(f);
+  };
+  const download = (name, blob) => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; a.click(); URL.revokeObjectURL(u); };
+  const exportJSON = () => download("design.json", new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" }));
+  const exportPNG = () => {
+    const { width, height, background } = doc.document;
+    const svg = document.getElementById("export-svg-source").cloneNode(true);
+    svg.setAttribute("width", width); svg.setAttribute("height", height);
+    const xml = new XMLSerializer().serializeToString(svg);
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = width; c.height = height;
+      const ctx = c.getContext("2d"); ctx.fillStyle = background; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0);
+      c.toBlob((b) => download("design.png", b), "image/png");
+    };
+    img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(xml)));
+  };
+
+  const Tool = ({ id, label }) => <button className={"tool" + (tool === id ? " active" : "")} onClick={() => setTool(id)}>{label}</button>;
+  const handles = selNode ? [["nw", selNode.x, selNode.y], ["ne", selNode.x + selNode.width, selNode.y],
+    ["sw", selNode.x, selNode.y + selNode.height], ["se", selNode.x + selNode.width, selNode.y + selNode.height]] : [];
+
+  return (
+    <div className="app">
+      <div className="topbar">
+        <span className="brand">◆ Mini-Figma</span>
+        <Tool id="select" label="↖ Select" /><Tool id="rect" label="▭ Rect" /><Tool id="ellipse" label="◯ Ellipse" />
+        <Tool id="text" label="T Text" /><Tool id="line" label="／ Line" />
+        <span className="sep"></span>
+        <button className="tool" onClick={loadFromServer}>⟳ Load design.json</button>
+        <button className="tool" onClick={() => fileRef.current.click()}>📂 Open file</button>
+        <input ref={fileRef} type="file" accept="application/json" style={{ display: "none" }} onChange={openFile} />
+        <button className="tool" onClick={exportJSON}>⭳ JSON</button>
+        <button className="tool" onClick={exportPNG}>⭳ PNG</button>
+        <span className="spacer"></span>
+        <span className="badge">{Math.round(view.scale * 100)}%</span>
+        <span style={{ fontSize: 12, color: "#9a9a9a" }}>{status}</span>
+      </div>
+
+      <div className="panel layers">
+        <h3>Layers ({doc.nodes.length})</h3>
+        {nodes.length === 0 && <div className="empty">No layers yet. Pick a tool and click the canvas, or load design.json.</div>}
+        {[...nodes].reverse().map((n) => (
+          <div key={n.id} className={"layer" + (sel === n.id ? " sel" : "")} onClick={() => { setSel(n.id); setTool("select"); }}>
+            <span className="sw" style={{ background: n.type === "text" ? n.color : (n.fill === "transparent" ? "#444" : n.fill) }}></span>
+            <span className="nm">{n.name} <span style={{ color: "#666" }}>· {n.type}</span></span>
+            <span className="x" onClick={(e) => { e.stopPropagation(); del(n.id); }}>×</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="stage" ref={stageRef} onMouseDown={onStageDown} onWheel={onWheel}>
+        <svg width="100%" height="100%" style={{ position: "absolute", inset: 0 }}>
+          <g transform={`translate(${view.x},${view.y}) scale(${view.scale})`}>
+            <rect data-bg="1" x={0} y={0} width={doc.document.width} height={doc.document.height} fill={doc.document.background} stroke="#888" strokeWidth={1 / view.scale} />
+            {nodes.map((n) => <Shape key={n.id} n={n} onDown={onShapeDown} />)}
+            {selNode && (
+              <g>
+                <rect x={selNode.x} y={selNode.y} width={selNode.width} height={selNode.height} fill="none" stroke="#4f46e5" strokeWidth={1.5 / view.scale} strokeDasharray={`${4 / view.scale} ${3 / view.scale}`} pointerEvents="none" />
+                {handles.map(([c, hx, hy]) => (
+                  <rect key={c} x={hx - 5 / view.scale} y={hy - 5 / view.scale} width={10 / view.scale} height={10 / view.scale}
+                    fill="#fff" stroke="#4f46e5" strokeWidth={1.5 / view.scale} style={{ cursor: c + "-resize" }}
+                    onMouseDown={(e) => onHandleDown(e, selNode.id, c)} />
+                ))}
+              </g>
+            )}
+          </g>
+        </svg>
+        <svg id="export-svg-source" style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }} viewBox={`0 0 ${doc.document.width} ${doc.document.height}`} xmlns="http://www.w3.org/2000/svg">
+          <rect x={0} y={0} width={doc.document.width} height={doc.document.height} fill={doc.document.background} />
+          {nodes.map((n) => <Shape key={n.id} n={n} onDown={() => {}} />)}
+        </svg>
+      </div>
+
+      <div className="panel props">
+        <h3 style={{ padding: "0 0 8px" }}>Properties</h3>
+        {!selNode && <div className="hint">Select a layer to edit its properties.<br /><br />Tip: Ctrl/⌘ + scroll to zoom. Drag empty canvas to pan.</div>}
+        {selNode && (
+          <div>
+            <div className="field"><label>Name</label><input type="text" value={selNode.name} onChange={(e) => patch(sel, { name: e.target.value })} /></div>
+            <div className="row2">
+              <div className="field"><label>X</label><input type="number" value={Math.round(selNode.x)} onChange={(e) => patch(sel, { x: +e.target.value })} /></div>
+              <div className="field"><label>Y</label><input type="number" value={Math.round(selNode.y)} onChange={(e) => patch(sel, { y: +e.target.value })} /></div>
+            </div>
+            <div className="row2">
+              <div className="field"><label>W</label><input type="number" value={Math.round(selNode.width)} onChange={(e) => patch(sel, { width: +e.target.value })} /></div>
+              <div className="field"><label>H</label><input type="number" value={Math.round(selNode.height)} onChange={(e) => patch(sel, { height: +e.target.value })} /></div>
+            </div>
+            <div className="row2">
+              <div className="field"><label>Rotation</label><input type="number" value={selNode.rotation} onChange={(e) => patch(sel, { rotation: +e.target.value })} /></div>
+              <div className="field"><label>Opacity</label><input type="number" step="0.1" min="0" max="1" value={selNode.opacity} onChange={(e) => patch(sel, { opacity: +e.target.value })} /></div>
+            </div>
+            {selNode.type === "text" ? (
+              <div>
+                <div className="field"><label>Text</label><input type="text" value={selNode.text} onChange={(e) => patch(sel, { text: e.target.value })} /></div>
+                <div className="row2">
+                  <div className="field"><label>Font size</label><input type="number" value={selNode.fontSize} onChange={(e) => patch(sel, { fontSize: +e.target.value })} /></div>
+                  <div className="field"><label>Color</label><input type="color" value={selNode.color} onChange={(e) => patch(sel, { color: e.target.value })} /></div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="field"><label>Fill</label><input type="color" value={selNode.fill === "transparent" ? "#ffffff" : selNode.fill} onChange={(e) => patch(sel, { fill: e.target.value })} /></div>
+                <div className="row2">
+                  <div className="field"><label>Stroke</label><input type="color" value={selNode.stroke} onChange={(e) => patch(sel, { stroke: e.target.value })} /></div>
+                  <div className="field"><label>Stroke W</label><input type="number" value={selNode.strokeWidth} onChange={(e) => patch(sel, { strokeWidth: +e.target.value })} /></div>
+                </div>
+              </div>
+            )}
+            <div className="row2" style={{ marginTop: 8 }}>
+              <button className="tool" onClick={() => reorder(sel, "up")}>↑ Forward</button>
+              <button className="tool" onClick={() => reorder(sel, "down")}>↓ Back</button>
+            </div>
+            <button className="tool" style={{ width: "100%", marginTop: 8 }} onClick={() => del(sel)}>🗑 Delete</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

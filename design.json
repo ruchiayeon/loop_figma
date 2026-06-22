@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "document": {
+    "width": 1200,
+    "height": 800,
+    "background": "#ffffff"
+  },
+  "nodes": [
+    {
+      "id": "n_mqovbo7j_1",
+      "type": "rect",
+      "name": "Rect 1",
+      "x": 400,
+      "y": 100,
+      "width": 200,
+      "height": 120,
+      "rotation": 0,
+      "opacity": 1,
+      "fill": "#00aaff",
+      "stroke": "#1e1b4b",
+      "strokeWidth": 0,
+      "zIndex": 0
+    }
+  ]
+}

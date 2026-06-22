@@ -11,21 +11,22 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: #1e1e1e; color: #e6e6e6; overflow: hidden; }
   #root { height: 100vh; }
-  .app { display: grid; grid-template-columns: 240px 1fr 260px; grid-template-rows: 48px 1fr; height: 100vh; }
-  .topbar { grid-column: 1 / 4; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #2c2c2c; border-bottom: 1px solid #000; }
-  .brand { font-weight: 700; font-size: 14px; margin-right: 12px; letter-spacing: .3px; }
-  .tool { background: #3a3a3a; border: 1px solid #4a4a4a; color: #e6e6e6; border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+  .app { display: grid; grid-template-columns: 250px 1fr 270px; grid-template-rows: 48px 1fr; height: 100vh; }
+  .topbar { grid-column: 1 / 4; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #2c2c2c; border-bottom: 1px solid #000; overflow-x: auto; }
+  .brand { font-weight: 700; font-size: 14px; margin-right: 12px; letter-spacing: .3px; white-space: nowrap; }
+  .tool { background: #3a3a3a; border: 1px solid #4a4a4a; color: #e6e6e6; border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; white-space: nowrap; }
   .tool:hover { background: #474747; }
   .tool.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
-  .sep { width: 1px; height: 22px; background: #4a4a4a; margin: 0 4px; }
+  .sep { width: 1px; height: 22px; background: #4a4a4a; margin: 0 4px; flex-shrink: 0; }
   .spacer { flex: 1; }
   .panel { background: #252525; overflow-y: auto; }
   .layers { border-right: 1px solid #000; }
   .props { border-left: 1px solid #000; padding: 12px; }
   .panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #9a9a9a; padding: 12px 12px 6px; }
-  .layer { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; border-left: 2px solid transparent; }
+  .layer { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; border-left: 2px solid transparent; }
   .layer:hover { background: #2f2f2f; }
   .layer.sel { background: #34324a; border-left-color: #4f46e5; }
+  .layer .tw { width: 14px; text-align: center; color: #888; font-size: 10px; cursor: pointer; flex-shrink: 0; user-select: none; }
   .layer .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #555; flex-shrink: 0; }
   .layer .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .layer .x { color: #888; font-size: 14px; }
@@ -33,12 +34,21 @@
   .stage { position: relative; overflow: hidden; background: #1a1a1a; background-image: radial-gradient(#2e2e2e 1px, transparent 1px); background-size: 16px 16px; }
   .field { margin-bottom: 10px; }
   .field label { display: block; font-size: 11px; color: #9a9a9a; margin-bottom: 4px; }
-  .field input[type=number], .field input[type=text] { width: 100%; background: #1c1c1c; border: 1px solid #3a3a3a; color: #e6e6e6; border-radius: 5px; padding: 6px 8px; font-size: 13px; }
+  .field input[type=number], .field input[type=text], .field select { width: 100%; background: #1c1c1c; border: 1px solid #3a3a3a; color: #e6e6e6; border-radius: 5px; padding: 6px 8px; font-size: 13px; }
   .field input[type=color] { width: 100%; height: 30px; background: #1c1c1c; border: 1px solid #3a3a3a; border-radius: 5px; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .row4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
   .hint { font-size: 12px; color: #888; padding: 12px; line-height: 1.5; }
-  .badge { font-size: 11px; background: #4f46e5; color: #fff; padding: 2px 7px; border-radius: 10px; }
+  .badge { font-size: 11px; background: #4f46e5; color: #fff; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
   .empty { padding: 12px; color: #777; font-size: 12px; }
+  .live { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+  .dot.on { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .sectionhead { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #9a9a9a; margin: 14px 0 6px; border-top: 1px solid #333; padding-top: 10px; }
+  .code { white-space: pre; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.45; background: #111; color: #d6d6d6; padding: 12px; border-radius: 6px; overflow: auto; height: 100%; }
+  .codewrap { position: absolute; inset: 0; display: flex; flex-direction: column; background: #161616; }
+  .codenote { font-size: 12px; color: #9a9a9a; padding: 10px 12px; border-bottom: 1px solid #333; line-height: 1.5; }
+  .codenote b { color: #c7c7c7; }
 </style>
 </head>
 <body>
@@ -46,12 +56,55 @@
 <script type="text/babel">
 const { useState, useRef, useEffect } = React;
 
+// ---------------------------------------------------------------------------
+// connectSync — inlined from realtime/client-snippet.js (no build step). Opens
+// a WebSocket to the sync hub and calls onChange() on {type:'design-changed'}.
+// Auto-reconnects with backoff. onStatus(connected:boolean) drives the "live"
+// indicator. file:// or no-hub simply keeps retrying => graceful degradation.
+// ---------------------------------------------------------------------------
+function connectSync(onChange, opts) {
+  opts = opts || {};
+  var port = opts.port || 8081;
+  var onStatus = opts.onStatus || function () {};
+  var url = opts.url ||
+    (location.protocol === "https:" ? "wss://" : "ws://") +
+      (location.hostname || "localhost") + ":" + port;
+  var ws = null, closed = false, backoff = 500;
+  function open() {
+    if (closed) return;
+    try { ws = new WebSocket(url); } catch (e) { setTimeout(open, backoff); return; }
+    ws.onopen = function () { backoff = 500; onStatus(true); };
+    ws.onmessage = function (ev) {
+      var msg;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (msg && msg.type === "design-changed") {
+        try { onChange(msg); } catch (e) {}
+      }
+    };
+    ws.onclose = function () {
+      onStatus(false);
+      if (closed) return;
+      setTimeout(open, backoff);
+      backoff = Math.min(backoff * 2, 8000);
+    };
+    ws.onerror = function () { try { ws.close(); } catch (e) {} };
+  }
+  open();
+  return { close: function () { closed = true; if (ws) { try { ws.close(); } catch (e) {} } } };
+}
+
+// ---------------------------------------------------------------------------
+// Model helpers
+// ---------------------------------------------------------------------------
 const DEFAULTS = {
   rect:    { width: 160, height: 100, fill: "#4f46e5", stroke: "#1e1b4b", strokeWidth: 0 },
   ellipse: { width: 140, height: 140, fill: "#10b981", stroke: "#064e3b", strokeWidth: 0 },
   text:    { width: 220, height: 40,  fill: "transparent", text: "Text", fontSize: 24, color: "#111827" },
-  line:    { width: 200, height: 0, stroke: "#e6e6e6", strokeWidth: 2 },
+  line:    { width: 0, height: 0, x2: 200, y2: 0, stroke: "#e6e6e6", strokeWidth: 2 },
+  frame:   { width: 400, height: 300, fill: "#f3f4f6", stroke: "#d1d5db", strokeWidth: 0 },
+  group:   { width: 0, height: 0, fill: "transparent", stroke: "transparent", strokeWidth: 0 },
 };
+const CONTAINER = new Set(["frame", "group"]);
 
 let idc = 0;
 const genId = () => `n_${Date.now().toString(36)}_${idc++}`;
@@ -59,79 +112,384 @@ const emptyDoc = () => ({ version: 1, document: { width: 1200, height: 800, back
 
 function newNode(type, x, y) {
   const d = DEFAULTS[type];
-  const n = { id: genId(), type, name: type[0].toUpperCase() + type.slice(1),
+  const n = {
+    id: genId(), type, name: type[0].toUpperCase() + type.slice(1),
     x, y, width: d.width, height: d.height, rotation: 0, opacity: 1,
-    fill: d.fill, stroke: d.stroke || "#000", strokeWidth: d.strokeWidth || 0, zIndex: 0 };
+    fill: d.fill, stroke: d.stroke || "#000", strokeWidth: d.strokeWidth || 0, zIndex: 0,
+  };
   if (type === "text") { n.text = d.text; n.fontSize = d.fontSize; n.color = d.color; }
-  if (type === "line") { n.x2 = x + d.width; n.y2 = y; }
+  if (type === "line") { n.x2 = x + d.x2; n.y2 = y; }
+  if (type === "frame") { n.clipsContent = true; n.children = []; }
+  if (type === "group") { n.children = []; }
   return n;
 }
 
-function Shape({ n, onDown }) {
-  const t = `rotate(${n.rotation || 0} ${n.x + n.width / 2} ${n.y + n.height / 2})`;
-  const common = { opacity: n.opacity, transform: t, onMouseDown: (e) => onDown(e, n.id), style: { cursor: "move" } };
-  if (n.type === "rect")
-    return <rect x={n.x} y={n.y} width={n.width} height={n.height} fill={n.fill} stroke={n.stroke} strokeWidth={n.strokeWidth} {...common} />;
-  if (n.type === "ellipse")
-    return <ellipse cx={n.x + n.width / 2} cy={n.y + n.height / 2} rx={n.width / 2} ry={n.height / 2} fill={n.fill} stroke={n.stroke} strokeWidth={n.strokeWidth} {...common} />;
-  if (n.type === "text")
-    return <text x={n.x} y={n.y + (n.fontSize || 24)} fontSize={n.fontSize} fill={n.color} fontFamily="Inter, sans-serif" {...common}>{n.text}</text>;
-  if (n.type === "line")
-    return <line x1={n.x} y1={n.y} x2={n.x2} y2={n.y2} stroke={n.stroke} strokeWidth={Math.max(n.strokeWidth, 1)} {...common} />;
-  return null;
+// Sort a sibling list in z-order, matching store.js renderNodes(): stable sort
+// by (zIndex ?? index), index as tiebreak. Returns [{node, index}] in order.
+function ordered(list) {
+  return list
+    .map((node, index) => ({ node, index }))
+    .sort((a, b) => (a.node.zIndex ?? a.index) - (b.node.zIndex ?? b.index) || a.index - b.index);
 }
 
+// Walk the tree to find a node + its parent + the sibling array it lives in.
+function findNode(id, doc) {
+  function walk(siblings, parent) {
+    for (const node of siblings) {
+      if (node.id === id) return { node, parent, siblings };
+      if (Array.isArray(node.children)) {
+        const hit = walk(node.children, node);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+  return walk(doc.nodes, null);
+}
+
+// Absolute canvas origin of a node: sum of x/y over the node AND all of its
+// ancestors. (Ancestor rotation is intentionally NOT accounted for — out of
+// scope.) Reduces to {x:n.x, y:n.y} for a top-level node. Used to place the
+// resize Handles (rendered outside the node's transform chain) and to rebase
+// create-into-container coords through arbitrarily deep nesting.
+function absOffset(id, doc) {
+  let x = 0, y = 0;
+  function walk(siblings) {
+    for (const node of siblings) {
+      if (node.id === id) { x += node.x || 0; y += node.y || 0; return true; }
+      if (Array.isArray(node.children) && walk(node.children)) {
+        x += node.x || 0; y += node.y || 0; return true;
+      }
+    }
+    return false;
+  }
+  walk(doc.nodes);
+  return { x, y };
+}
+
+// Immutable patch of a node's props anywhere in the tree (returns new doc).
+function patchTree(doc, id, props) {
+  function walk(list) {
+    return list.map((n) => {
+      if (n.id === id) {
+        const upd = { ...n, ...props };
+        if (Array.isArray(n.children)) upd.children = n.children;
+        return upd;
+      }
+      if (Array.isArray(n.children)) return { ...n, children: walk(n.children) };
+      return n;
+    });
+  }
+  return { ...doc, nodes: walk(doc.nodes) };
+}
+
+// Immutable delete (drops subtree); renumbers surviving siblings' zIndex.
+function deleteTree(doc, id) {
+  function walk(list) {
+    const removedHere = list.some((n) => n.id === id);
+    const filtered = list.filter((n) => n.id !== id).map((n) =>
+      Array.isArray(n.children) ? { ...n, children: walk(n.children) } : n
+    );
+    // Renumber zIndex only on the level where a sibling was removed; spread so
+    // we never mutate objects shared with the previous (still-referenced) doc.
+    if (removedHere) return filtered.map((n, i) => ({ ...n, zIndex: i }));
+    return filtered;
+  }
+  return { ...doc, nodes: walk(doc.nodes) };
+}
+
+// Insert a freshly-created node into a parent (by id) or top-level (null).
+function insertNode(doc, node, parentId) {
+  if (parentId == null) {
+    node.zIndex = doc.nodes.length;
+    return { ...doc, nodes: [...doc.nodes, node] };
+  }
+  function walk(list) {
+    return list.map((n) => {
+      if (n.id === parentId) {
+        const kids = Array.isArray(n.children) ? n.children : [];
+        node.zIndex = kids.length;
+        return { ...n, children: [...kids, node] };
+      }
+      if (Array.isArray(n.children)) return { ...n, children: walk(n.children) };
+      return n;
+    });
+  }
+  return { ...doc, nodes: walk(doc.nodes) };
+}
+
+// Total node count across the whole tree (for layer counts / status).
+function countNodes(list) {
+  let n = 0;
+  (function walk(l) { for (const x of l) { n++; if (Array.isArray(x.children)) walk(x.children); } })(list || []);
+  return n;
+}
+
+// ---------------------------------------------------------------------------
+// Recursive renderer — MATCHES mcp-server/store.js toSVG() semantics:
+//   <g transform="translate(x,y) rotate(r w/2 h/2)" opacity=..>  primitive@0,0
+//   frame: bg rect (+ clipPath wrapping kids when clipsContent)
+//   group: bare transform wrapper around kids
+// Auto-layout coords are RESOLVED in the document; we only draw stored x/y.
+// ---------------------------------------------------------------------------
+function NodeView({ n, onDown, selId, scale }) {
+  const w = n.width || 0, h = n.height || 0;
+  const rot = n.rotation ? ` rotate(${n.rotation} ${w / 2} ${h / 2})` : "";
+  const transform = `translate(${n.x},${n.y})${rot}`;
+  const down = (e) => onDown(e, n.id);
+
+  const kids = Array.isArray(n.children) && n.children.length
+    ? ordered(n.children).map(({ node }) => (
+        <NodeView key={node.id} n={node} onDown={onDown} selId={selId} scale={scale} />
+      ))
+    : null;
+
+  let primitive = null;
+  if (n.type === "rect") {
+    primitive = <rect x={0} y={0} width={w} height={h} fill={n.fill} stroke={n.stroke} strokeWidth={n.strokeWidth} onMouseDown={down} style={{ cursor: "move" }} />;
+  } else if (n.type === "ellipse") {
+    primitive = <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} fill={n.fill} stroke={n.stroke} strokeWidth={n.strokeWidth} onMouseDown={down} style={{ cursor: "move" }} />;
+  } else if (n.type === "text") {
+    const fs = n.fontSize || 24;
+    primitive = <text x={0} y={fs} fontSize={fs} fill={n.color || "#111"} fontFamily="Inter, sans-serif" onMouseDown={down} style={{ cursor: "move" }}>{n.text || ""}</text>;
+  } else if (n.type === "line") {
+    primitive = <line x1={0} y1={0} x2={(n.x2 ?? n.x) - n.x} y2={(n.y2 ?? n.y) - n.y} stroke={n.stroke} strokeWidth={Math.max(n.strokeWidth || 0, 1)} onMouseDown={down} style={{ cursor: "move" }} />;
+  } else if (n.type === "image") {
+    primitive = <image href={n.src} x={0} y={0} width={w} height={h} onMouseDown={down} style={{ cursor: "move" }} />;
+  } else if (n.type === "frame") {
+    const bg = <rect x={0} y={0} width={w} height={h} fill={n.fill} stroke={n.stroke} strokeWidth={n.strokeWidth} onMouseDown={down} style={{ cursor: "move" }} />;
+    if (n.clipsContent) {
+      const clipId = `clip-${n.id}`;
+      primitive = (
+        <React.Fragment>
+          <defs><clipPath id={clipId}><rect x={0} y={0} width={w} height={h} /></clipPath></defs>
+          {bg}
+          <g clipPath={`url(#${clipId})`}>{kids}</g>
+        </React.Fragment>
+      );
+    } else {
+      primitive = <React.Fragment>{bg}{kids}</React.Fragment>;
+    }
+  } else if (n.type === "group") {
+    // Group has no hit target of its own (matches toSVG). Selected via layers.
+    primitive = kids;
+  } else if (kids) {
+    primitive = kids;
+  }
+
+  // For non-frame containers, kids are rendered as part of primitive above only
+  // for frame/group. For leaf primitives that somehow have children, append.
+  const extraKids = (n.type !== "frame" && n.type !== "group" && kids) ? kids : null;
+
+  const overlay = selId === n.id ? <SelectionOverlay n={n} scale={scale} /> : null;
+
+  return (
+    <g transform={transform} opacity={n.opacity ?? 1}>
+      {primitive}
+      {extraKids}
+      {overlay}
+    </g>
+  );
+}
+
+// Selection box + resize handles drawn in the node's LOCAL coords (0,0,w,h),
+// inheriting the same transform stack so no parent-offset math is needed.
+function SelectionOverlay({ n, scale }) {
+  const w = n.width || 0, h = n.height || 0;
+  const k = 1 / scale;
+  return (
+    <g pointerEvents="none">
+      <rect x={0} y={0} width={w} height={h} fill="none" stroke="#4f46e5"
+        strokeWidth={1.5 * k} strokeDasharray={`${4 * k} ${3 * k}`} />
+    </g>
+  );
+}
+
+// Handles are rendered separately (with pointer events) so resize works, as a
+// direct child of the view group — NOT inside the node's transform chain (that
+// would clip them at a clipping frame's edge). Because they live outside the
+// ancestor transforms, we position them at the node's ABSOLUTE canvas origin
+// (abs = absOffset of the selected node). The node's OWN rotation is still
+// applied here (around its own center) so handles track a rotated node, exactly
+// as the dashed SelectionOverlay does inside the transform chain.
+function Handles({ n, abs, scale, onHandleDown }) {
+  const w = n.width || 0, h = n.height || 0, k = 1 / scale, s = 5 * k;
+  const corners = [["nw", 0, 0], ["ne", w, 0], ["sw", 0, h], ["se", w, h]];
+  const rot = n.rotation ? ` rotate(${n.rotation} ${w / 2} ${h / 2})` : "";
+  return (
+    <g transform={`translate(${abs.x},${abs.y})${rot}`}>
+      {corners.map(([c, hx, hy]) => (
+        <rect key={c} x={hx - s} y={hy - s} width={2 * s} height={2 * s}
+          fill="#fff" stroke="#4f46e5" strokeWidth={1.5 * k}
+          style={{ cursor: c + "-resize" }}
+          onMouseDown={(e) => onHandleDown(e, n.id, c)} />
+      ))}
+    </g>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Layers tree (indented, expand/collapse, selection at any depth)
+// ---------------------------------------------------------------------------
+function LayerRow({ node, depth, sel, setSel, del, collapsed, toggle }) {
+  const isContainer = CONTAINER.has(node.type);
+  const open = !collapsed[node.id];
+  const swColor = node.type === "text" ? node.color
+    : node.type === "group" ? "#444"
+    : (node.fill === "transparent" || node.fill == null ? "#444" : node.fill);
+  const kids = isContainer && Array.isArray(node.children) ? ordered(node.children).map((e) => e.node) : [];
+  return (
+    <React.Fragment>
+      <div className={"layer" + (sel === node.id ? " sel" : "")}
+        style={{ paddingLeft: 10 + depth * 14 }}
+        onClick={() => setSel(node.id)}>
+        <span className="tw" onClick={(e) => { e.stopPropagation(); if (isContainer && kids.length) toggle(node.id); }}>
+          {isContainer && kids.length ? (open ? "▾" : "▸") : ""}
+        </span>
+        <span className="sw" style={{ background: swColor }}></span>
+        <span className="nm">{node.name} <span style={{ color: "#666" }}>· {node.type}</span></span>
+        <span className="x" onClick={(e) => { e.stopPropagation(); del(node.id); }}>×</span>
+      </div>
+      {isContainer && open && kids.map((c) => (
+        <LayerRow key={c.id} node={c} depth={depth + 1} sel={sel} setSel={setSel}
+          del={del} collapsed={collapsed} toggle={toggle} />
+      ))}
+    </React.Fragment>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lightweight to-code PREVIEW. Authoritative codegen is the MCP export_design
+// tool (bridge/to-code.mjs). This is a clearly-labeled, trivial subset only.
+// ---------------------------------------------------------------------------
+function codePreview(doc) {
+  const r = (v) => { const x = Number(v); return Number.isFinite(x) ? Math.round(x) : 0; };
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  function styleOf(n, parentFlex) {
+    const p = [];
+    p.push(parentFlex ? "position:'relative'" : "position:'absolute'");
+    if (!parentFlex) { p.push(`left:'${r(n.x)}px'`); p.push(`top:'${r(n.y)}px'`); }
+    p.push(`width:'${r(n.width)}px'`); p.push(`height:'${r(n.height)}px'`);
+    p.push(`backgroundColor:'${n.fill == null ? "transparent" : n.fill}'`);
+    if (n.type === "ellipse") p.push("borderRadius:'50%'");
+    if (n.type === "text") p.push(`color:'${n.color || "#000"}'`);
+    const flex = n.layout && n.layout.mode && n.layout.mode !== "none";
+    if (flex) {
+      p.push("display:'flex'");
+      p.push(`flexDirection:'${n.layout.mode === "horizontal" ? "row" : "column"}'`);
+      p.push(`gap:'${r(n.layout.gap || 0)}px'`);
+    }
+    return "{ " + p.join(", ") + " }";
+  }
+  function node(n, parentFlex, depth) {
+    const pad = "  ".repeat(depth);
+    const flex = n.layout && n.layout.mode && n.layout.mode !== "none";
+    if (n.type === "text") return `${pad}<span data-node="text" style={${styleOf(n)}}>${esc(n.text || "")}</span>`;
+    if (n.type === "image") return `${pad}<img data-node="image" src="${esc(n.src || "")}" style={${styleOf(n, parentFlex)}} />`;
+    if (CONTAINER.has(n.type)) {
+      const kids = Array.isArray(n.children) ? n.children : [];
+      if (!kids.length) return `${pad}<div data-node="${n.type}" style={${styleOf(n, parentFlex)}}></div>`;
+      const body = kids.map((c) => node(c, flex, depth + 1)).join("\n");
+      return `${pad}<div data-node="${n.type}" style={${styleOf(n, parentFlex)}}>\n${body}\n${pad}</div>`;
+    }
+    return `${pad}<div data-node="${n.type}" style={${styleOf(n, parentFlex)}}></div>`;
+  }
+  const d = doc.document || {};
+  const body = (doc.nodes || []).map((n) => node(n, false, 3)).join("\n");
+  return `function Design() {\n  return (\n    <div data-doc="root" style={{ position:'relative', width:'${r(d.width)}px', height:'${r(d.height)}px', backgroundColor:'${d.background || "#fff"}' }}>\n${body}\n    </div>\n  );\n}`;
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
 function App() {
   const [doc, setDoc] = useState(emptyDoc);
   const [sel, setSel] = useState(null);
   const [tool, setTool] = useState("select");
   const [view, setView] = useState({ x: 40, y: 40, scale: 0.7 });
   const [status, setStatus] = useState("Ready");
+  const [collapsed, setCollapsed] = useState({});
+  const [live, setLive] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   const stageRef = useRef(null);
   const drag = useRef(null);
   const fileRef = useRef(null);
+  const docRef = useRef(doc);
+  docRef.current = doc;
 
-  const nodes = [...doc.nodes].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
-  const selNode = doc.nodes.find((n) => n.id === sel) || null;
+  const found = sel ? findNode(sel, doc) : null;
+  const selNode = found ? found.node : null;
 
   const toCanvas = (cx, cy) => {
     const r = stageRef.current.getBoundingClientRect();
     return { x: (cx - r.left - view.x) / view.scale, y: (cy - r.top - view.y) / view.scale };
   };
-  const patch = (id, props) => setDoc((d) => ({ ...d, nodes: d.nodes.map((n) => n.id === id ? { ...n, ...props } : n) }));
+  const patch = (id, props) => setDoc((d) => patchTree(d, id, props));
 
+  const toggle = (id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }));
+
+  // Create-into-selected-container: if a frame/group is selected, new nodes go
+  // inside it with parent-local coords; otherwise top-level.
   const onStageDown = (e) => {
     const p = toCanvas(e.clientX, e.clientY);
     if (tool === "select") {
-      if (e.target.dataset.bg) { setSel(null); drag.current = { mode: "pan", sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }; }
+      if (e.target.dataset && e.target.dataset.bg) {
+        setSel(null);
+        drag.current = { mode: "pan", sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y };
+      }
       return;
     }
-    const n = newNode(tool, Math.round(p.x), Math.round(p.y));
-    n.zIndex = doc.nodes.length;
-    setDoc((d) => ({ ...d, nodes: [...d.nodes, n] }));
-    setSel(n.id); setTool("select"); setStatus(`Created ${n.type}`);
+    let parentId = null, lx = Math.round(p.x), ly = Math.round(p.y);
+    if (selNode && CONTAINER.has(selNode.type)) {
+      // Parent-local coords = cursor (canvas-abs) minus the container's ABSOLUTE
+      // origin (full ancestor chain), so deep-nested children land under the
+      // cursor regardless of nesting depth.
+      parentId = selNode.id;
+      const abs = absOffset(selNode.id, doc);
+      lx = Math.round(p.x - abs.x);
+      ly = Math.round(p.y - abs.y);
+    }
+    const n = newNode(tool, lx, ly);
+    setDoc((d) => insertNode(d, n, parentId));
+    setSel(n.id); setTool("select");
+    setStatus(`Created ${n.type}${parentId ? " in " + selNode.name : ""}`);
   };
+
   const onShapeDown = (e, id) => {
-    e.stopPropagation(); setSel(id);
-    const n = doc.nodes.find((x) => x.id === id);
+    e.stopPropagation();
+    setSel(id);
+    const f = findNode(id, docRef.current);
+    if (!f) return;
     const p = toCanvas(e.clientX, e.clientY);
-    drag.current = { mode: "move", id, ox: p.x - n.x, oy: p.y - n.y };
+    // Delta-based drag: store start canvas point + node start x/y. Under
+    // pure-translate ancestors, canvas delta == parent-local delta.
+    drag.current = { mode: "move", id, startCanvas: p, startX: f.node.x, startY: f.node.y };
   };
+
   const onHandleDown = (e, id, corner) => {
     e.stopPropagation();
-    const n = doc.nodes.find((x) => x.id === id);
-    drag.current = { mode: "resize", id, corner, start: { ...n }, p0: toCanvas(e.clientX, e.clientY) };
+    const f = findNode(id, docRef.current);
+    if (!f) return;
+    drag.current = { mode: "resize", id, corner, start: { ...f.node }, p0: toCanvas(e.clientX, e.clientY) };
   };
 
   useEffect(() => {
     const move = (e) => {
       if (!drag.current) return;
       const g = drag.current;
-      if (g.mode === "pan") { setView((v) => ({ ...v, x: g.vx + (e.clientX - g.sx), y: g.vy + (e.clientY - g.sy) })); return; }
+      if (g.mode === "pan") {
+        setView((v) => ({ ...v, x: g.vx + (e.clientX - g.sx), y: g.vy + (e.clientY - g.sy) }));
+        return;
+      }
       const p = toCanvas(e.clientX, e.clientY);
-      if (g.mode === "move") patch(g.id, { x: Math.round(p.x - g.ox), y: Math.round(p.y - g.oy) });
+      if (g.mode === "move") {
+        const nx = Math.round(g.startX + (p.x - g.startCanvas.x));
+        const ny = Math.round(g.startY + (p.y - g.startCanvas.y));
+        patch(g.id, { x: nx, y: ny });
+      }
       if (g.mode === "resize") {
-        const dx = p.x - g.p0.x, dy = p.y - g.p0.y; const s = g.start; let { x, y, width, height } = s;
+        const dx = p.x - g.p0.x, dy = p.y - g.p0.y, s = g.start;
+        let { x, y, width, height } = s;
         if (g.corner.includes("e")) width = Math.max(8, s.width + dx);
         if (g.corner.includes("s")) height = Math.max(8, s.height + dy);
         if (g.corner.includes("w")) { width = Math.max(8, s.width - dx); x = s.x + dx; }
@@ -150,33 +508,72 @@ function App() {
     if (e.ctrlKey || e.metaKey) {
       const f = e.deltaY < 0 ? 1.1 : 0.9;
       setView((v) => ({ ...v, scale: Math.min(4, Math.max(0.1, v.scale * f)) }));
-    } else setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
+    } else {
+      setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
+    }
   };
 
-  const del = (id) => { setDoc((d) => ({ ...d, nodes: d.nodes.filter((n) => n.id !== id) })); if (sel === id) setSel(null); };
+  const del = (id) => { setDoc((d) => deleteTree(d, id)); if (sel === id) setSel(null); };
+
+  // Reorder within the node's own sibling list (forward/back).
   const reorder = (id, dir) => setDoc((d) => {
-    const ns = d.nodes.map((n) => ({ ...n }));
-    const n = ns.find((x) => x.id === id); if (!n) return d;
-    n.zIndex = (n.zIndex || 0) + (dir === "up" ? 1.5 : -1.5);
-    ns.sort((a, b) => a.zIndex - b.zIndex).forEach((x, i) => x.zIndex = i);
-    return { ...d, nodes: ns };
+    const f = findNode(id, d);
+    if (!f) return d;
+    // Rebuild the sibling list with a nudge + renumber.
+    const apply = (list) => {
+      const copy = list.map((n) => ({ ...n }));
+      const idx = copy.findIndex((n) => n.id === id);
+      if (idx === -1) return null;
+      copy[idx].zIndex = (copy[idx].zIndex ?? idx) + (dir === "up" ? 1.5 : -1.5);
+      copy.sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0)).forEach((n, i) => { n.zIndex = i; });
+      return copy;
+    };
+    function walk(list) {
+      if (list.some((n) => n.id === id)) {
+        const res = apply(list);
+        return res || list;
+      }
+      return list.map((n) => Array.isArray(n.children) ? { ...n, children: walk(n.children) } : n);
+    }
+    return { ...d, nodes: walk(d.nodes) };
   });
 
-  const loadFromServer = async () => {
+  // -- realtime live-reload ------------------------------------------------
+  const refetch = async (silent) => {
     try {
-      const res = await fetch("../design.json?t=" + Date.now());
+      const res = await fetch("../design.json?t=" + Date.now(), { cache: "no-store" });
       if (!res.ok) throw new Error("nf");
       const j = await res.json();
-      setDoc(j); setSel(null); setStatus(`Loaded ${j.nodes.length} nodes from design.json`);
-    } catch { setStatus("Can't fetch over file://. Use 'Open file' to pick design.json."); }
+      setDoc(j);
+      setStatus(`${silent ? "Live update" : "Loaded"}: ${countNodes(j.nodes)} nodes from design.json`);
+      return true;
+    } catch {
+      if (!silent) setStatus("Can't fetch over file://. Use 'Open file' to pick design.json.");
+      return false;
+    }
   };
+
+  useEffect(() => {
+    const conn = connectSync(
+      () => { if (!drag.current) refetch(true); }, // skip refetch mid-edit
+      { port: 8081, onStatus: (ok) => setLive(ok) }
+    );
+    return () => conn.close();
+  }, []);
+
   const openFile = (e) => {
     const f = e.target.files[0]; if (!f) return;
     const r = new FileReader();
-    r.onload = () => { try { const j = JSON.parse(r.result); setDoc(j); setSel(null); setStatus(`Loaded ${j.nodes.length} nodes`); } catch { setStatus("Invalid JSON"); } };
+    r.onload = () => {
+      try { const j = JSON.parse(r.result); setDoc(j); setSel(null); setStatus(`Loaded ${countNodes(j.nodes)} nodes`); }
+      catch { setStatus("Invalid JSON"); }
+    };
     r.readAsText(f);
   };
-  const download = (name, blob) => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; a.click(); URL.revokeObjectURL(u); };
+  const download = (name, blob) => {
+    const u = URL.createObjectURL(blob); const a = document.createElement("a");
+    a.href = u; a.download = name; a.click(); URL.revokeObjectURL(u);
+  };
   const exportJSON = () => download("design.json", new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" }));
   const exportPNG = () => {
     const { width, height, background } = doc.document;
@@ -186,15 +583,24 @@ function App() {
     const img = new Image();
     img.onload = () => {
       const c = document.createElement("canvas"); c.width = width; c.height = height;
-      const ctx = c.getContext("2d"); ctx.fillStyle = background; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0);
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = background; ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0);
       c.toBlob((b) => download("design.png", b), "image/png");
     };
     img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(xml)));
   };
 
-  const Tool = ({ id, label }) => <button className={"tool" + (tool === id ? " active" : "")} onClick={() => setTool(id)}>{label}</button>;
-  const handles = selNode ? [["nw", selNode.x, selNode.y], ["ne", selNode.x + selNode.width, selNode.y],
-    ["sw", selNode.x, selNode.y + selNode.height], ["se", selNode.x + selNode.width, selNode.y + selNode.height]] : [];
+  const Tool = ({ id, label }) => (
+    <button className={"tool" + (tool === id ? " active" : "")} onClick={() => setTool(id)}>{label}</button>
+  );
+
+  const topNodes = ordered(doc.nodes).map((e) => e.node);
+  const layoutOf = (n) => n.layout || { mode: "none", gap: 0, padding: { top: 0, right: 0, bottom: 0, left: 0 }, align: "start", justify: "start" };
+  const setLayout = (props) => {
+    const cur = layoutOf(selNode);
+    patch(sel, { layout: { ...cur, ...props, padding: { ...(cur.padding || {}), ...(props.padding || {}) } } });
+  };
 
   return (
     <div className="app">
@@ -202,58 +608,65 @@ function App() {
         <span className="brand">◆ Mini-Figma</span>
         <Tool id="select" label="↖ Select" /><Tool id="rect" label="▭ Rect" /><Tool id="ellipse" label="◯ Ellipse" />
         <Tool id="text" label="T Text" /><Tool id="line" label="／ Line" />
+        <Tool id="frame" label="⬚ Frame" /><Tool id="group" label="⧉ Group" />
         <span className="sep"></span>
-        <button className="tool" onClick={loadFromServer}>⟳ Load design.json</button>
+        <button className="tool" onClick={() => refetch(false)}>⟳ Load design.json</button>
         <button className="tool" onClick={() => fileRef.current.click()}>📂 Open file</button>
         <input ref={fileRef} type="file" accept="application/json" style={{ display: "none" }} onChange={openFile} />
         <button className="tool" onClick={exportJSON}>⭳ JSON</button>
         <button className="tool" onClick={exportPNG}>⭳ PNG</button>
+        <button className={"tool" + (showCode ? " active" : "")} onClick={() => setShowCode((v) => !v)}>{"</>"} Code</button>
         <span className="spacer"></span>
+        <span className="live"><span className={"dot" + (live ? " on" : "")}></span>{live ? "live" : "offline"}</span>
         <span className="badge">{Math.round(view.scale * 100)}%</span>
         <span style={{ fontSize: 12, color: "#9a9a9a" }}>{status}</span>
       </div>
 
       <div className="panel layers">
-        <h3>Layers ({doc.nodes.length})</h3>
-        {nodes.length === 0 && <div className="empty">No layers yet. Pick a tool and click the canvas, or load design.json.</div>}
-        {[...nodes].reverse().map((n) => (
-          <div key={n.id} className={"layer" + (sel === n.id ? " sel" : "")} onClick={() => { setSel(n.id); setTool("select"); }}>
-            <span className="sw" style={{ background: n.type === "text" ? n.color : (n.fill === "transparent" ? "#444" : n.fill) }}></span>
-            <span className="nm">{n.name} <span style={{ color: "#666" }}>· {n.type}</span></span>
-            <span className="x" onClick={(e) => { e.stopPropagation(); del(n.id); }}>×</span>
-          </div>
+        <h3>Layers ({countNodes(doc.nodes)})</h3>
+        {topNodes.length === 0 && <div className="empty">No layers yet. Pick a tool and click the canvas, or load design.json.</div>}
+        {[...topNodes].reverse().map((n) => (
+          <LayerRow key={n.id} node={n} depth={0} sel={sel} setSel={(id) => { setSel(id); setTool("select"); }}
+            del={del} collapsed={collapsed} toggle={toggle} />
         ))}
       </div>
 
       <div className="stage" ref={stageRef} onMouseDown={onStageDown} onWheel={onWheel}>
         <svg width="100%" height="100%" style={{ position: "absolute", inset: 0 }}>
           <g transform={`translate(${view.x},${view.y}) scale(${view.scale})`}>
-            <rect data-bg="1" x={0} y={0} width={doc.document.width} height={doc.document.height} fill={doc.document.background} stroke="#888" strokeWidth={1 / view.scale} />
-            {nodes.map((n) => <Shape key={n.id} n={n} onDown={onShapeDown} />)}
-            {selNode && (
-              <g>
-                <rect x={selNode.x} y={selNode.y} width={selNode.width} height={selNode.height} fill="none" stroke="#4f46e5" strokeWidth={1.5 / view.scale} strokeDasharray={`${4 / view.scale} ${3 / view.scale}`} pointerEvents="none" />
-                {handles.map(([c, hx, hy]) => (
-                  <rect key={c} x={hx - 5 / view.scale} y={hy - 5 / view.scale} width={10 / view.scale} height={10 / view.scale}
-                    fill="#fff" stroke="#4f46e5" strokeWidth={1.5 / view.scale} style={{ cursor: c + "-resize" }}
-                    onMouseDown={(e) => onHandleDown(e, selNode.id, c)} />
-                ))}
-              </g>
-            )}
+            <rect data-bg="1" x={0} y={0} width={doc.document.width} height={doc.document.height}
+              fill={doc.document.background} stroke="#888" strokeWidth={1 / view.scale} />
+            {topNodes.map((n) => (
+              <NodeView key={n.id} n={n} onDown={onShapeDown} selId={sel} scale={view.scale} />
+            ))}
+            {selNode && <Handles n={selNode} abs={absOffset(selNode.id, doc)} scale={view.scale} onHandleDown={onHandleDown} />}
           </g>
         </svg>
-        <svg id="export-svg-source" style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }} viewBox={`0 0 ${doc.document.width} ${doc.document.height}`} xmlns="http://www.w3.org/2000/svg">
+        {/* Hidden, untransformed SVG used as the PNG/preview render source. */}
+        <svg id="export-svg-source" style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
+          viewBox={`0 0 ${doc.document.width} ${doc.document.height}`} xmlns="http://www.w3.org/2000/svg">
           <rect x={0} y={0} width={doc.document.width} height={doc.document.height} fill={doc.document.background} />
-          {nodes.map((n) => <Shape key={n.id} n={n} onDown={() => {}} />)}
+          {topNodes.map((n) => <NodeView key={n.id} n={n} onDown={() => {}} selId={null} scale={1} />)}
         </svg>
+
+        {showCode && (
+          <div className="codewrap">
+            <div className="codenote">
+              <b>Code preview</b> (read-only, simplified). The <b>authoritative</b> codegen is the
+              MCP tool <b>export_design format=code</b> (bridge/to-code.mjs), which is the only
+              source of truth and supports the full lossless round-trip.
+            </div>
+            <pre className="code">{codePreview(doc)}</pre>
+          </div>
+        )}
       </div>
 
       <div className="panel props">
         <h3 style={{ padding: "0 0 8px" }}>Properties</h3>
-        {!selNode && <div className="hint">Select a layer to edit its properties.<br /><br />Tip: Ctrl/⌘ + scroll to zoom. Drag empty canvas to pan.</div>}
+        {!selNode && <div className="hint">Select a layer to edit its properties.<br /><br />Tip: Ctrl/⌘ + scroll to zoom. Drag empty canvas to pan. Select a frame/group, then a tool, to create inside it.</div>}
         {selNode && (
           <div>
-            <div className="field"><label>Name</label><input type="text" value={selNode.name} onChange={(e) => patch(sel, { name: e.target.value })} /></div>
+            <div className="field"><label>Name ({selNode.type})</label><input type="text" value={selNode.name} onChange={(e) => patch(sel, { name: e.target.value })} /></div>
             <div className="row2">
               <div className="field"><label>X</label><input type="number" value={Math.round(selNode.x)} onChange={(e) => patch(sel, { x: +e.target.value })} /></div>
               <div className="field"><label>Y</label><input type="number" value={Math.round(selNode.y)} onChange={(e) => patch(sel, { y: +e.target.value })} /></div>
@@ -263,26 +676,85 @@ function App() {
               <div className="field"><label>H</label><input type="number" value={Math.round(selNode.height)} onChange={(e) => patch(sel, { height: +e.target.value })} /></div>
             </div>
             <div className="row2">
-              <div className="field"><label>Rotation</label><input type="number" value={selNode.rotation} onChange={(e) => patch(sel, { rotation: +e.target.value })} /></div>
-              <div className="field"><label>Opacity</label><input type="number" step="0.1" min="0" max="1" value={selNode.opacity} onChange={(e) => patch(sel, { opacity: +e.target.value })} /></div>
+              <div className="field"><label>Rotation</label><input type="number" value={selNode.rotation || 0} onChange={(e) => patch(sel, { rotation: +e.target.value })} /></div>
+              <div className="field"><label>Opacity</label><input type="number" step="0.1" min="0" max="1" value={selNode.opacity ?? 1} onChange={(e) => patch(sel, { opacity: +e.target.value })} /></div>
             </div>
-            {selNode.type === "text" ? (
+
+            {selNode.type === "text" && (
               <div>
-                <div className="field"><label>Text</label><input type="text" value={selNode.text} onChange={(e) => patch(sel, { text: e.target.value })} /></div>
+                <div className="field"><label>Text</label><input type="text" value={selNode.text || ""} onChange={(e) => patch(sel, { text: e.target.value })} /></div>
                 <div className="row2">
-                  <div className="field"><label>Font size</label><input type="number" value={selNode.fontSize} onChange={(e) => patch(sel, { fontSize: +e.target.value })} /></div>
-                  <div className="field"><label>Color</label><input type="color" value={selNode.color} onChange={(e) => patch(sel, { color: e.target.value })} /></div>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div className="field"><label>Fill</label><input type="color" value={selNode.fill === "transparent" ? "#ffffff" : selNode.fill} onChange={(e) => patch(sel, { fill: e.target.value })} /></div>
-                <div className="row2">
-                  <div className="field"><label>Stroke</label><input type="color" value={selNode.stroke} onChange={(e) => patch(sel, { stroke: e.target.value })} /></div>
-                  <div className="field"><label>Stroke W</label><input type="number" value={selNode.strokeWidth} onChange={(e) => patch(sel, { strokeWidth: +e.target.value })} /></div>
+                  <div className="field"><label>Font size</label><input type="number" value={selNode.fontSize || 24} onChange={(e) => patch(sel, { fontSize: +e.target.value })} /></div>
+                  <div className="field"><label>Color</label><input type="color" value={selNode.color || "#111827"} onChange={(e) => patch(sel, { color: e.target.value })} /></div>
                 </div>
               </div>
             )}
+
+            {selNode.type === "image" && (
+              <div className="field"><label>Image src</label><input type="text" value={selNode.src || ""} onChange={(e) => patch(sel, { src: e.target.value })} /></div>
+            )}
+
+            {selNode.type !== "text" && selNode.type !== "group" && (
+              <div>
+                <div className="field"><label>Fill</label><input type="color" value={selNode.fill === "transparent" || !selNode.fill ? "#ffffff" : selNode.fill} onChange={(e) => patch(sel, { fill: e.target.value })} /></div>
+                <div className="row2">
+                  <div className="field"><label>Stroke</label><input type="color" value={selNode.stroke && selNode.stroke !== "transparent" ? selNode.stroke : "#000000"} onChange={(e) => patch(sel, { stroke: e.target.value })} /></div>
+                  <div className="field"><label>Stroke W</label><input type="number" value={selNode.strokeWidth || 0} onChange={(e) => patch(sel, { strokeWidth: +e.target.value })} /></div>
+                </div>
+              </div>
+            )}
+
+            {selNode.type === "frame" && (
+              <div className="field">
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <input type="checkbox" checked={selNode.clipsContent !== false} onChange={(e) => patch(sel, { clipsContent: e.target.checked })} style={{ width: "auto" }} />
+                  Clip content
+                </label>
+              </div>
+            )}
+
+            {CONTAINER.has(selNode.type) && (
+              <div>
+                <div className="sectionhead">Auto-layout</div>
+                <div className="hint" style={{ padding: "0 0 8px", fontSize: 11 }}>
+                  Sets the <b>layout</b> field only. Child positions are resolved by the MCP
+                  layout engine on the next op — re-run via MCP to see resolved coords.
+                </div>
+                <div className="field"><label>Mode</label>
+                  <select value={layoutOf(selNode).mode} onChange={(e) => setLayout({ mode: e.target.value })}>
+                    <option value="none">none</option>
+                    <option value="horizontal">horizontal</option>
+                    <option value="vertical">vertical</option>
+                  </select>
+                </div>
+                {layoutOf(selNode).mode !== "none" && (
+                  <div>
+                    <div className="field"><label>Gap</label><input type="number" value={layoutOf(selNode).gap || 0} onChange={(e) => setLayout({ gap: +e.target.value })} /></div>
+                    <label style={{ fontSize: 11, color: "#9a9a9a" }}>Padding (T R B L)</label>
+                    <div className="row4" style={{ marginBottom: 10 }}>
+                      {["top", "right", "bottom", "left"].map((side) => (
+                        <input key={side} type="number" value={(layoutOf(selNode).padding || {})[side] || 0}
+                          onChange={(e) => setLayout({ padding: { [side]: +e.target.value } })} />
+                      ))}
+                    </div>
+                    <div className="row2">
+                      <div className="field"><label>Align</label>
+                        <select value={layoutOf(selNode).align || "start"} onChange={(e) => setLayout({ align: e.target.value })}>
+                          <option value="start">start</option><option value="center">center</option><option value="end">end</option>
+                        </select>
+                      </div>
+                      <div className="field"><label>Justify</label>
+                        <select value={layoutOf(selNode).justify || "start"} onChange={(e) => setLayout({ justify: e.target.value })}>
+                          <option value="start">start</option><option value="center">center</option>
+                          <option value="end">end</option><option value="space-between">space-between</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="row2" style={{ marginTop: 8 }}>
               <button className="tool" onClick={() => reorder(sel, "up")}>↑ Forward</button>
               <button className="tool" onClick={() => reorder(sel, "down")}>↓ Back</button>

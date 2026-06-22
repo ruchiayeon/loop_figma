@@ -6,13 +6,14 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { layout } from "./layout.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // design.json lives one level up so the canvas and the server share it.
 export const DESIGN_PATH = resolve(__dirname, "..", "design.json");
 
-const NODE_TYPES = new Set(["rect", "ellipse", "text", "line", "frame", "group"]);
+const NODE_TYPES = new Set(["rect", "ellipse", "text", "line", "frame", "group", "image"]);
 // Only these node types may contain children. Parenting under anything else
 // would orphan the child (the renderer never recurses into primitives).
 const CONTAINER_TYPES = new Set(["frame", "group"]);
@@ -70,6 +71,8 @@ const DEFAULTS = {
   frame:   { width: 400, height: 300, fill: "#f3f4f6", stroke: "#d1d5db", strokeWidth: 0 },
   // group: a logical container with NO own background; size is derived/optional.
   group:   { width: 0, height: 0, fill: "transparent", stroke: "transparent", strokeWidth: 0 },
+  // image: a leaf that renders an <image href> at its box; fill is transparent.
+  image:   { width: 200, height: 150, fill: "transparent", stroke: "transparent", strokeWidth: 0, src: "" },
 };
 
 // Clamp helper keeps designs sane (no NaN, no negative sizes).
@@ -126,20 +129,29 @@ export function createNode(props = {}) {
     node.x2 = num(props.x2, node.x + d.x2);
     node.y2 = num(props.y2, node.y + d.y2);
   }
+  if (type === "image") {
+    node.src = props.src ?? d.src;
+  }
   if (type === "frame") {
     // clipsContent is a boolean (not numeric) — default true.
     node.clipsContent = props.clipsContent ?? true;
+    // Optional auto-layout config on frames (see layout.js for the schema).
+    if (props.layout && typeof props.layout === "object") node.layout = props.layout;
     node.children = [];
   }
   if (type === "group") {
+    if (props.layout && typeof props.layout === "object") node.layout = props.layout;
     node.children = [];
   }
   // Note: parentId is NOT stored on the node. The children array is the single
   // source of truth for the tree, so a stored parentId would go stale on move.
 
   siblings.push(node);
-  saveDesign(doc);
-  return node;
+  // Re-resolve auto-layout: if this node joined an auto-layout container (or is
+  // itself one), its/sibling coords must reflect the engine. applyLayout saves.
+  applyLayout(doc);
+  // Return the resolved node (applyLayout replaced `node` with a deep copy).
+  return findNode(node.id, doc).node;
 }
 
 // Tree walk: find a node anywhere in the tree by id. Returns
@@ -179,13 +191,15 @@ export function updateNode(id, props = {}) {
   const allowed = [
     "name", "x", "y", "width", "height", "rotation", "opacity",
     "fill", "stroke", "strokeWidth", "zIndex", "clipsContent",
-    "text", "fontSize", "color", "x2", "y2",
+    "text", "fontSize", "color", "x2", "y2", "src", "layout",
   ];
   for (const key of allowed) {
     if (key in props) node[key] = props[key];
   }
-  saveDesign(doc);
-  return node;
+  // A size change on a child, or a layout change on a container, can shift the
+  // resolved positions of auto-layout siblings/children. Re-resolve + save.
+  applyLayout(doc);
+  return findNode(id, doc).node;
 }
 
 export function deleteNode(id) {
@@ -198,7 +212,9 @@ export function deleteNode(id) {
   siblings.splice(idx, 1);
   // Keep zIndex contiguous and array-order-authoritative for the survivors.
   renumberZIndex(siblings);
-  saveDesign(doc);
+  // Re-resolve auto-layout: removing a child from an auto-layout container shifts
+  // the survivors' resolved coords. Like the other mutators, applyLayout saves.
+  applyLayout(doc);
   return { deleted: id, remaining: countNodes(doc) };
 }
 
@@ -262,8 +278,22 @@ export function moveNode(id, newParentId = null, index) {
   renumberZIndex(oldSiblings);
   renumberZIndex(destList);
 
+  // Reparenting can place the node into (or pull it out of) an auto-layout
+  // container; re-resolve so coords match the engine, then save.
+  applyLayout(doc);
+  return findNode(id, doc).node;
+}
+
+// Resolve ALL auto-layout containers in the document, top-down, and persist the
+// recomputed child x/y. layout.js is the single source of truth: it walks the
+// whole tree (inner-first per subtree) and overwrites children of any container
+// whose layout.mode is "horizontal"/"vertical". Containers with no layout (or
+// mode "none") are left untouched, so explicit-coordinate frames are stable.
+// Idempotent: positions derive from sizes+config, never from prior positions.
+export function applyLayout(doc = loadDesign()) {
+  doc.nodes = doc.nodes.map((n) => layout(n));
   saveDesign(doc);
-  return node;
+  return doc;
 }
 
 // Render the document to a standalone SVG string — handy for exporting or
@@ -312,6 +342,9 @@ function renderNode(n) {
   if (n.type === "line") {
     // Stored x2/y2 are absolute (same space as x/y); make them local.
     return `${open}<line x1="0" y1="0" x2="${(n.x2 ?? n.x) - n.x}" y2="${(n.y2 ?? n.y) - n.y}" stroke="${n.stroke}" stroke-width="${n.strokeWidth}"/>${close}`;
+  }
+  if (n.type === "image") {
+    return `${open}<image href="${escapeXml(n.src || "")}" x="0" y="0" width="${w}" height="${h}"/>${close}`;
   }
   if (n.type === "frame") {
     const bg = `<rect x="0" y="0" width="${w}" height="${h}" fill="${n.fill}" stroke="${n.stroke}" stroke-width="${n.strokeWidth}"/>`;

@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import {
-  loadDesign, createNode, updateNode, deleteNode, findNode, moveNode, toSVG,
+  loadDesign, createNode, updateNode, deleteNode, findNode, moveNode, applyLayout, toSVG,
 } from "./store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -68,9 +68,9 @@ async function main() {
 
   const list = await request("tools/list", {});
   const names = list.result.tools.map((t) => t.name).sort();
-  check("lists 5 tools", names.length === 5);
+  check("lists 8 tools", names.length === 8);
   check("expected tool names",
-    JSON.stringify(names) === JSON.stringify(["create_node", "delete_node", "export_design", "get_design", "update_node"]));
+    JSON.stringify(names) === JSON.stringify(["create_node", "delete_node", "export_design", "get_design", "import_code", "move_node", "set_layout", "update_node"]));
 
   let design = parse(await request("tools/call", { name: "get_design", arguments: {} }));
   check("empty doc has 0 nodes", design.nodes.length === 0);
@@ -114,6 +114,75 @@ async function main() {
   check("delete reports remaining", del.remaining === 1);
   design = parse(await request("tools/call", { name: "get_design", arguments: {} }));
   check("doc now has 1 node", design.nodes.length === 1);
+
+  // ---- NEW MCP TOOLS ----
+
+  // image node: create + round-trip through SVG (<image href>).
+  const img = parse(await request("tools/call", {
+    name: "create_node", arguments: { type: "image", x: 20, y: 30, width: 64, height: 48, src: "https://example.com/a.png" },
+  }));
+  check("create_node image stores src", img.type === "image" && img.src === "https://example.com/a.png");
+  const imgSvg = (await request("tools/call", { name: "export_design", arguments: { format: "svg" } })).result.content[0].text;
+  check("svg export renders <image href", imgSvg.includes('<image href="https://example.com/a.png"'));
+
+  // set_layout on a frame with children resolves child x to padding.left.
+  const lf = parse(await request("tools/call", {
+    name: "create_node", arguments: { type: "frame", x: 0, y: 0, width: 400, height: 200, clipsContent: false },
+  }));
+  const lc1 = parse(await request("tools/call", {
+    name: "create_node", arguments: { type: "rect", parentId: lf.id, x: 999, y: 999, width: 50, height: 50 },
+  }));
+  const lc2 = parse(await request("tools/call", {
+    name: "create_node", arguments: { type: "rect", parentId: lf.id, x: 999, y: 999, width: 50, height: 50 },
+  }));
+  const laidOut = parse(await request("tools/call", {
+    name: "set_layout", arguments: { id: lf.id, mode: "horizontal", gap: 10, padding: { top: 5, right: 5, bottom: 5, left: 12 }, align: "start", justify: "start" },
+  }));
+  // set_layout returns the updated subtree with resolved child coords.
+  check("set_layout returns subtree with resolved first child x = padding.left",
+    laidOut.children[0].x === 12 && laidOut.children[0].y === 5);
+  // second child = padding.left + width + gap = 12 + 50 + 10 = 72.
+  check("set_layout resolves second child x (gap+width)", laidOut.children[1].x === 72);
+  // The resolved coords are persisted to design.json.
+  let lfDoc = JSON.parse(readFileSync(DESIGN_PATH, "utf8"));
+  let lfPersist = lfDoc.nodes.find((n) => n.id === lf.id);
+  check("auto-layout horizontal child x persisted to design.json", lfPersist.children[0].x === 12 && lfPersist.children[1].x === 72);
+
+  // Adding ANOTHER child to the now-auto-layout frame re-resolves on create.
+  const lc3 = parse(await request("tools/call", {
+    name: "create_node", arguments: { type: "rect", parentId: lf.id, x: 999, y: 999, width: 50, height: 50 },
+  }));
+  // third child = 12 + 2*(50+10) = 132.
+  check("create child into auto-layout frame gets resolved x", lc3.x === 132 && lc3.y === 5);
+
+  // move_node via MCP changes render order. Build two top-level rects at known x.
+  const ma = parse(await request("tools/call", { name: "create_node", arguments: { type: "rect", x: 700, y: 0, width: 10, height: 10 } }));
+  const mb = parse(await request("tools/call", { name: "create_node", arguments: { type: "rect", x: 800, y: 0, width: 10, height: 10 } }));
+  const svgBefore = (await request("tools/call", { name: "export_design", arguments: { format: "svg" } })).result.content[0].text;
+  check("move_node: before move ma renders before mb",
+    svgBefore.indexOf('translate(700,0)') < svgBefore.indexOf('translate(800,0)'));
+  parse(await request("tools/call", { name: "move_node", arguments: { id: ma.id, index: 99 } }));
+  const svgAfter = (await request("tools/call", { name: "export_design", arguments: { format: "svg" } })).result.content[0].text;
+  check("move_node via MCP changes render order (ma now after mb)",
+    svgAfter.indexOf('translate(800,0)') < svgAfter.indexOf('translate(700,0)'));
+
+  // export_design format=code returns JSX with data-node markers.
+  const codeOut = (await request("tools/call", { name: "export_design", arguments: { format: "code" } })).result.content[0].text;
+  check("export_design format=code returns JSX with data-node markers",
+    codeOut.includes("function Design()") && codeOut.includes('data-node="rect"') && codeOut.includes('data-node="image"'));
+
+  // import_code replaces the document.
+  const replacementJsx =
+    'function Design() {\n  return (\n' +
+    '    <div data-doc="root" data-doc-version="1" data-doc-width="640" data-doc-height="480" data-doc-background="#222222" style={{ position: "relative", width: "640px", height: "480px", backgroundColor: "#222222" }}>\n' +
+    '      <div data-node="rect" data-node-id="imp1" data-name="Imported" data-x="11" data-y="22" data-rotation="0" data-z="0" style={{ position: "absolute", left: "11px", top: "22px", width: "33px", height: "44px", opacity: 1, backgroundColor: "#abcdef", border: "0px solid transparent" }}></div>\n' +
+    '    </div>\n  );\n}\n';
+  const imported = parse(await request("tools/call", { name: "import_code", arguments: { jsx: replacementJsx } }));
+  check("import_code replaces the document (new size + single node)",
+    imported.document.width === 640 && imported.document.background === "#222222" &&
+    imported.nodes.length === 1 && imported.nodes[0].id === "imp1" && imported.nodes[0].fill === "#abcdef");
+  const afterImport = parse(await request("tools/call", { name: "get_design", arguments: {} }));
+  check("import_code persisted: old nodes gone", afterImport.nodes.length === 1 && afterImport.nodes[0].id === "imp1");
 
   child.kill();
 
@@ -287,6 +356,73 @@ function storeTests() {
   const gSvg = toSVG(doc);
   check("guard: leaf still rendered (not orphaned/dropped)",
     gSvg.includes('translate(50,50)'));
+
+  // 9. IMAGE node round-trips through create + toSVG (<image href).
+  if (existsSync(DESIGN_PATH)) rmSync(DESIGN_PATH);
+  const image = createNode({ type: "image", x: 5, y: 6, width: 70, height: 90, src: "pic.png" });
+  doc = loadDesign();
+  const imageInDoc = findNode(image.id, doc).node;
+  check("image: stored with src and type", imageInDoc.type === "image" && imageInDoc.src === "pic.png");
+  const iSvg = toSVG(doc);
+  check("image: renders <image href + sized box inside its <g transform",
+    iSvg.includes('translate(5,6)') &&
+    iSvg.includes('<image href="pic.png" x="0" y="0" width="70" height="90"/>'));
+
+  // 10. AUTO-LAYOUT resolved into stored coords + idempotent applyLayout.
+  if (existsSync(DESIGN_PATH)) rmSync(DESIGN_PATH);
+  const alf = createNode({
+    type: "frame", x: 0, y: 0, width: 400, height: 200, clipsContent: false,
+    layout: { mode: "horizontal", gap: 10, padding: { top: 4, right: 0, bottom: 0, left: 8 }, align: "start", justify: "start" },
+  });
+  createNode({ type: "rect", parentId: alf.id, x: 999, y: 999, width: 50, height: 30 });
+  const alc2 = createNode({ type: "rect", parentId: alf.id, x: 999, y: 999, width: 50, height: 30 });
+  doc = loadDesign();
+  const alfNode = findNode(alf.id, doc).node;
+  check("autolayout: stored child x resolved (first = padding.left)", alfNode.children[0].x === 8 && alfNode.children[0].y === 4);
+  check("autolayout: stored second child x = left+width+gap", alfNode.children[1].x === 68);
+  // createNode returned the RESOLVED node (not the input 999,999).
+  check("autolayout: createNode returns resolved child coords", alc2.x === 68 && alc2.y === 4);
+  // applyLayout is idempotent: running twice yields identical coords.
+  applyLayout();
+  const once = readFileSync(DESIGN_PATH, "utf8");
+  applyLayout();
+  const twice = readFileSync(DESIGN_PATH, "utf8");
+  check("applyLayout is idempotent (two passes identical)", once === twice);
+
+  // 11. AUTO-LAYOUT must NOT touch frames with no layout (explicit coords stay).
+  if (existsSync(DESIGN_PATH)) rmSync(DESIGN_PATH);
+  const plainF = createNode({ type: "frame", x: 0, y: 0, width: 300, height: 300 });
+  const plainChild = createNode({ type: "rect", parentId: plainF.id, x: 17, y: 23, width: 10, height: 10 });
+  applyLayout();
+  doc = loadDesign();
+  const pc = findNode(plainChild.id, doc).node;
+  check("autolayout: no-layout frame leaves child coords untouched", pc.x === 17 && pc.y === 23);
+
+  // 12. DELETE must RE-RESOLVE auto-layout: removing a middle child of a
+  //     horizontal auto-layout container must reflow survivors (no stale hole).
+  if (existsSync(DESIGN_PATH)) rmSync(DESIGN_PATH);
+  const delF = createNode({
+    type: "frame", x: 0, y: 0, width: 400, height: 200, clipsContent: false,
+    layout: { mode: "horizontal", gap: 10, padding: { top: 0, right: 0, bottom: 0, left: 0 }, align: "start", justify: "start" },
+  });
+  const dc1 = createNode({ type: "rect", parentId: delF.id, x: 999, y: 999, width: 50, height: 50 });
+  const dc2 = createNode({ type: "rect", parentId: delF.id, x: 999, y: 999, width: 50, height: 50 });
+  const dc3 = createNode({ type: "rect", parentId: delF.id, x: 999, y: 999, width: 50, height: 50 });
+  // Resolved x with gap 10 + width 50: [0, 60, 120].
+  doc = loadDesign();
+  let delFNode = findNode(delF.id, doc).node;
+  check("delete-reflow: initial resolved x = [0,60,120]",
+    delFNode.children[0].x === 0 && delFNode.children[1].x === 60 && delFNode.children[2].x === 120);
+  // Delete the MIDDLE child; survivors must reflow to [0,60], NOT keep [0,120].
+  const delResult = deleteNode(dc2.id);
+  doc = loadDesign();
+  delFNode = findNode(delF.id, doc).node;
+  check("delete-reflow: survivors reflow to [0,60] (not [0,120])",
+    delFNode.children.length === 2 && delFNode.children[0].x === 0 && delFNode.children[1].x === 60);
+  check("delete-reflow: surviving children are dc1 and dc3",
+    delFNode.children[0].id === dc1.id && delFNode.children[1].id === dc3.id);
+  // delete still reports the correct remaining count (frame + 2 survivors = 3).
+  check("delete-reflow: remaining count correct after delete", delResult.remaining === 3);
 }
 
 main().catch((err) => { console.error("Test harness crashed:", err); process.exit(1); });

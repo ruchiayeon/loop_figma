@@ -41,8 +41,10 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        type: { type: "string", enum: ["rect", "ellipse", "text", "line"], description: "Shape type" },
+        type: { type: "string", enum: ["rect", "ellipse", "text", "line", "frame", "group"], description: "Shape type or container" },
         name: { type: "string", description: "Optional layer name" },
+        parentId: { type: "string", description: "Optional id of a frame/group to nest this node inside; coords become relative to that parent" },
+        clipsContent: { type: "boolean", description: "For type=frame: clip children to frame bounds (default true)" },
         x: { type: "number" }, y: { type: "number" },
         width: { type: "number" }, height: { type: "number" },
         rotation: { type: "number", description: "Degrees" },

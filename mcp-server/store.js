@@ -406,10 +406,12 @@ function expandInstance(node, doc, depth, chain) {
     .map((c) => applyOverridesAndReid(deepClone(c), node.id, node.overrides))
     .map((c) => expandNode(c, doc, depth + 1, nextChain));
 
-  // The instance becomes a group at its own x/y. Width/height carry over.
+  // The instance renders the WHOLE master (its own background + children), not
+  // just the children — so it becomes a frame carrying the master's visual
+  // props, positioned at the instance's own x/y. Width/height carry over.
   return {
     id: node.id,
-    type: "group",
+    type: "frame",
     name: node.name || "Instance",
     x: node.x,
     y: node.y,
@@ -417,9 +419,10 @@ function expandInstance(node, doc, depth, chain) {
     height: node.height ?? master.height,
     rotation: node.rotation ?? 0,
     opacity: node.opacity ?? 1,
-    fill: "transparent",
-    stroke: "transparent",
-    strokeWidth: 0,
+    fill: master.fill ?? "transparent",
+    stroke: master.stroke ?? "transparent",
+    strokeWidth: master.strokeWidth ?? 0,
+    clipsContent: master.clipsContent ?? false,
     zIndex: node.zIndex,
     children: cloned,
   };

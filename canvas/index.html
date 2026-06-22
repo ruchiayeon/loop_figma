@@ -340,9 +340,28 @@ function NodeView({ n, onDown, selId, scale, doc, depth, instDepth, chain }) {
       // instDepth and extend the componentId chain (cycle guard). Structural
       // `depth` also bumps just for stable keys/indentation.
       const nextChain = [...chain, n.componentId];
-      primitive = order.map((node) => (
+      const m = res.master;
+      const iw = w || m.width, ih = h || m.height;
+      // The instance renders the WHOLE master: its own background + children
+      // (mirrors store.expandInstance, which expands to a frame). Without the
+      // master's bg, e.g. a button's fill would vanish and white labels would
+      // be invisible on the parent.
+      const ibg = <rect x={0} y={0} width={iw} height={ih} fill={m.fill} stroke={m.stroke} strokeWidth={m.strokeWidth || 0} onMouseDown={down} style={{ cursor: "move" }} />;
+      const ikids = order.map((node) => (
         <NodeView key={node.id} n={node} onDown={onDown} selId={selId} scale={scale} doc={doc} depth={depth + 1} instDepth={instDepth + 1} chain={nextChain} />
       ));
+      if (m.clipsContent) {
+        const clipId = `clip-${n.id}`;
+        primitive = (
+          <React.Fragment>
+            <defs><clipPath id={clipId}><rect x={0} y={0} width={iw} height={ih} /></clipPath></defs>
+            {ibg}
+            <g clipPath={`url(#${clipId})`}>{ikids}</g>
+          </React.Fragment>
+        );
+      } else {
+        primitive = <React.Fragment>{ibg}{ikids}</React.Fragment>;
+      }
     }
   } else if (n.type === "group") {
     // Group has no hit target of its own (matches toSVG). Selected via layers.
@@ -647,6 +666,7 @@ function App() {
   };
 
   useEffect(() => {
+    refetch(true); // auto-load the shared document on startup (over a server)
     const conn = connectSync(
       () => { if (!drag.current) refetch(true); }, // skip refetch mid-edit
       { port: 8081, onStatus: (ok) => setLive(ok) }

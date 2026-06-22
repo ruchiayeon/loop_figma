@@ -1,2 +1,4 @@
 node_modules/
 *.log
+canvas-check*.png
+canvas-final.png

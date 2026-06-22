@@ -475,7 +475,7 @@ function componentTests() {
   if (existsSync(DESIGN_PATH)) rmSync(DESIGN_PATH);
 
   // 1. A component master (frame-like) with a text child.
-  const comp = createNode({ type: "component", x: 0, y: 0, width: 200, height: 60 });
+  const comp = createNode({ type: "component", x: 0, y: 0, width: 200, height: 60, fill: "#123456" });
   let doc = loadDesign();
   check("component is a container (has children[])", Array.isArray(findNode(comp.id, doc).node.children));
   const labelMaster = createNode({ type: "text", parentId: comp.id, x: 10, y: 10, text: "Original", color: "#111111" });
@@ -505,7 +505,10 @@ function componentTests() {
   const rdoc = resolveInstances(doc);
   const r1 = rdoc.nodes.find((n) => n.id === i1.id);
   const r2 = rdoc.nodes.find((n) => n.id === i2.id);
-  check("resolved instance is a group at the instance x/y", r1.type === "group" && r1.x === 300 && r1.y === 0);
+  // An instance expands to a FRAME carrying the master's OWN background (so a
+  // button's fill etc. is not lost), positioned at the instance x/y.
+  check("resolved instance is a frame at the instance x/y", r1.type === "frame" && r1.x === 300 && r1.y === 0);
+  check("resolved instance carries the master's background fill", r1.fill === "#123456");
   check("resolved instance contains the cloned master child", r1.children.length === 1 && r1.children[0].text === "Original");
   check("clone ids are instance-derived (instanceId:masterId)", r1.children[0].id === `${i1.id}:${labelMaster.id}`);
   // Authoring doc is NOT mutated by resolveInstances (still an instance, no children).

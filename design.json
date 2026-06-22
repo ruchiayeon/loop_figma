@@ -7,7 +7,7 @@
   },
   "nodes": [
     {
-      "id": "n_mqoxjgs8_1",
+      "id": "n_mqoxq5qz_1",
       "type": "frame",
       "name": "Card",
       "x": 120,
@@ -23,7 +23,7 @@
       "clipsContent": true,
       "children": [
         {
-          "id": "n_mqoxjgsg_2",
+          "id": "n_mqoxq5rb_2",
           "type": "rect",
           "name": "Header bg",
           "x": 0,
@@ -38,7 +38,7 @@
           "zIndex": 0
         },
         {
-          "id": "n_mqoxjgso_3",
+          "id": "n_mqoxq5ro_3",
           "type": "text",
           "name": "Title",
           "x": 28,
@@ -56,7 +56,7 @@
           "color": "#ffffff"
         },
         {
-          "id": "n_mqoxjgsv_4",
+          "id": "n_mqoxq5rz_4",
           "type": "ellipse",
           "name": "Avatar",
           "x": 452,
@@ -71,7 +71,7 @@
           "zIndex": 2
         },
         {
-          "id": "n_mqoxjgt2_5",
+          "id": "n_mqoxq5sb_5",
           "type": "text",
           "name": "Body",
           "x": 28,
@@ -89,7 +89,7 @@
           "color": "#374151"
         },
         {
-          "id": "n_mqoxjgta_6",
+          "id": "n_mqoxq5so_6",
           "type": "line",
           "name": "Divider",
           "x": 28,
@@ -105,7 +105,7 @@
           "y2": 156
         },
         {
-          "id": "n_mqoxjgty_9",
+          "id": "n_mqoxq5th_9",
           "type": "frame",
           "name": "Button row",
           "x": 28,
@@ -133,7 +133,7 @@
           },
           "children": [
             {
-              "id": "n_mqoxjgu5_10",
+              "id": "n_mqoxq5tr_10",
               "type": "instance",
               "name": "Confirm",
               "x": 0,
@@ -146,15 +146,15 @@
               "stroke": "transparent",
               "strokeWidth": 0,
               "zIndex": 0,
-              "componentId": "n_mqoxjgti_7",
+              "componentId": "n_mqoxq5sz_7",
               "overrides": {
-                "n_mqoxjgtp_8": {
+                "n_mqoxq5t9_8": {
                   "text": "Confirm"
                 }
               }
             },
             {
-              "id": "n_mqoxjgud_11",
+              "id": "n_mqoxq5u3_11",
               "type": "instance",
               "name": "Cancel",
               "x": 166,
@@ -167,9 +167,9 @@
               "stroke": "transparent",
               "strokeWidth": 0,
               "zIndex": 1,
-              "componentId": "n_mqoxjgti_7",
+              "componentId": "n_mqoxq5sz_7",
               "overrides": {
-                "n_mqoxjgtp_8": {
+                "n_mqoxq5t9_8": {
                   "text": "Cancel"
                 }
               }
@@ -179,7 +179,7 @@
       ]
     },
     {
-      "id": "n_mqoxjgti_7",
+      "id": "n_mqoxq5sz_7",
       "type": "component",
       "name": "Button",
       "x": 700,
@@ -195,7 +195,7 @@
       "clipsContent": true,
       "children": [
         {
-          "id": "n_mqoxjgtp_8",
+          "id": "n_mqoxq5t9_8",
           "type": "text",
           "name": "label",
           "x": 44,
